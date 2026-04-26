@@ -1,0 +1,185 @@
+"use client";
+
+/**
+ * ChessBoard component — wraps react-chessboard with game logic
+ */
+
+import { useCallback, useState } from "react";
+import { Chessboard } from "react-chessboard";
+import { useGameStore } from "@/stores/game-store";
+import { useUserStore } from "@/stores/user-store";
+import { useSocket } from "@/hooks/use-socket";
+import { getLegalMovesFrom, isOwnPiece, getGameState } from "@/lib/chess-engine";
+
+interface ChessBoardProps {
+  gameId: string;
+  readOnly?: boolean;
+  fen?: string; // override for review mode
+  onMove?: (from: string, to: string, promotion?: string) => void;
+}
+
+export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove }: ChessBoardProps) {
+  const { game, myColor, selectedSquare, legalMoves, lastMove, pendingMove, selectSquare, setLegalMoves, setPendingMove } = useGameStore();
+  const { preferences } = useUserStore();
+  const { makeMove } = useSocket();
+  const [promotionSquare, setPromotionSquare] = useState<string | null>(null);
+  const [promotionMove, setPromotionMove] = useState<{ from: string; to: string } | null>(null);
+
+  const fen = fenOverride ?? game?.fen ?? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const isFlipped = myColor === "black";
+  const isMyTurn = !readOnly && game?.currentTurn === myColor;
+
+  // Build custom square styles
+  const customSquareStyles: Record<string, React.CSSProperties> = {};
+
+  // Highlight last move
+  if (lastMove) {
+    customSquareStyles[lastMove.from] = { backgroundColor: "rgba(255, 255, 0, 0.3)" };
+    customSquareStyles[lastMove.to] = { backgroundColor: "rgba(255, 255, 0, 0.3)" };
+  }
+
+  // Highlight selected square
+  if (selectedSquare) {
+    customSquareStyles[selectedSquare] = { backgroundColor: "rgba(20, 85, 30, 0.5)" };
+  }
+
+  // Highlight legal moves
+  if (preferences.showLegalMoves) {
+    legalMoves.forEach((sq) => {
+      customSquareStyles[sq] = {
+        background: "radial-gradient(circle, rgba(0,0,0,.1) 25%, transparent 25%)",
+        borderRadius: "50%",
+      };
+    });
+  }
+
+  // Check highlight
+  const gameState = getGameState(fen);
+  if (gameState.isCheck && !gameState.isCheckmate) {
+    // Find king square and highlight in red
+    // (simplified — react-chessboard handles this via custom styles)
+  }
+
+  const handleSquareClick = useCallback(
+    (square: string) => {
+      if (!isMyTurn || readOnly) return;
+
+      // If a piece is already selected and this is a legal move target
+      if (selectedSquare && legalMoves.includes(square)) {
+        // Check if promotion needed
+        const piece = game?.fen ? null : null; // simplified
+        const isPromotion =
+          (myColor === "white" && square[1] === "8") ||
+          (myColor === "black" && square[1] === "1");
+
+        if (isPromotion) {
+          setPromotionMove({ from: selectedSquare, to: square });
+          setPromotionSquare(square);
+          return;
+        }
+
+        // Make the move
+        if (preferences.autoPromoteToQueen) {
+          executeMove(selectedSquare, square, "q");
+        } else {
+          executeMove(selectedSquare, square);
+        }
+        return;
+      }
+
+      // Select a new piece
+      if (game?.fen && isOwnPiece(fen, square, myColor!)) {
+        selectSquare(square);
+        const moves = getLegalMovesFrom(fen, square);
+        setLegalMoves(moves);
+      } else {
+        selectSquare(null);
+        setLegalMoves([]);
+      }
+    },
+    [isMyTurn, selectedSquare, legalMoves, myColor, fen, game, preferences, readOnly]
+  );
+
+  const handlePieceDrop = useCallback(
+    (sourceSquare: string, targetSquare: string, piece: string): boolean => {
+      if (!isMyTurn || readOnly) return false;
+
+      const moves = getLegalMovesFrom(fen, sourceSquare);
+      if (!moves.includes(targetSquare)) return false;
+
+      // Check promotion
+      const isPawn = piece.toLowerCase().includes("p");
+      const isPromotion =
+        isPawn &&
+        ((myColor === "white" && targetSquare[1] === "8") ||
+          (myColor === "black" && targetSquare[1] === "1"));
+
+      if (isPromotion && !preferences.autoPromoteToQueen) {
+        setPromotionMove({ from: sourceSquare, to: targetSquare });
+        setPromotionSquare(targetSquare);
+        return true;
+      }
+
+      executeMove(sourceSquare, targetSquare, isPromotion ? "q" : undefined);
+      return true;
+    },
+    [isMyTurn, fen, myColor, preferences, readOnly]
+  );
+
+  const executeMove = (from: string, to: string, promotion?: string) => {
+    if (onMove) {
+      onMove(from, to, promotion);
+    } else {
+      // Optimistic update
+      setPendingMove({ from, to, promotion });
+      makeMove(gameId, from, to, promotion);
+    }
+    selectSquare(null);
+    setLegalMoves([]);
+  };
+
+  const handlePromotion = (piece: string) => {
+    if (promotionMove) {
+      executeMove(promotionMove.from, promotionMove.to, piece);
+    }
+    setPromotionMove(null);
+    setPromotionSquare(null);
+  };
+
+  return (
+    <div className="relative w-full aspect-square">
+      <Chessboard
+        id={`board-${gameId}`}
+        position={fen}
+        onSquareClick={handleSquareClick}
+        onPieceDrop={handlePieceDrop}
+        boardOrientation={isFlipped ? "black" : "white"}
+        customSquareStyles={customSquareStyles}
+        arePiecesDraggable={isMyTurn && !readOnly}
+        animationDuration={preferences.animationSpeed === "fast" ? 100 : preferences.animationSpeed === "slow" ? 400 : 200}
+        showBoardNotation={preferences.showCoordinates}
+        customBoardStyle={{
+          borderRadius: "4px",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+        }}
+      />
+
+      {/* Promotion dialog */}
+      {promotionSquare && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 rounded">
+          <div className="bg-slate-800 rounded-xl p-4 flex gap-3">
+            {["q", "r", "b", "n"].map((piece) => (
+              <button
+                key={piece}
+                onClick={() => handlePromotion(piece)}
+                className="w-16 h-16 bg-slate-700 hover:bg-slate-600 rounded-lg text-3xl flex items-center justify-center transition-colors"
+              >
+                {piece === "q" ? "♛" : piece === "r" ? "♜" : piece === "b" ? "♝" : "♞"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
