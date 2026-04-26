@@ -7,7 +7,7 @@ import { db } from "@/db";
 import { ratingHistory, userStats } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { ok, Errors } from "@/lib/api-response";
-import { apiLimiter, withRateLimit } from "@/lib/rate-limit";
+import { withRateLimit, apiLimiter } from "@/lib/rate-limit";
 import type { TimingCategory } from "@/types/game";
 
 export async function GET(
@@ -20,47 +20,50 @@ export async function GET(
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   const timingCategory = (searchParams.get("timingCategory") ?? "rapid") as TimingCategory;
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "100"), 200);
 
-  const history = await db.query.ratingHistory.findMany({
-    where: and(
-      eq(ratingHistory.userId, id),
-      eq(ratingHistory.timingCategory, timingCategory)
-    ),
-    orderBy: [desc(ratingHistory.createdAt)],
-    limit,
-  });
+  try {
+    const [history, stats] = await Promise.all([
+      db.query.ratingHistory.findMany({
+        where: and(
+          eq(ratingHistory.userId, id),
+          eq(ratingHistory.timingCategory, timingCategory)
+        ),
+        orderBy: [desc(ratingHistory.createdAt)],
+        limit: 100,
+      }),
+      db.query.userStats.findFirst({ where: eq(userStats.userId, id) }),
+    ]);
 
-  if (!history.length) {
-    // Return empty history with current rating
-    const stats = await db.query.userStats.findFirst({
-      where: eq(userStats.userId, id),
-    });
+    if (!stats) return Errors.notFound("User");
+
+    const currentRating = (() => {
+      switch (timingCategory) {
+        case "bullet": return stats.ratingBullet;
+        case "blitz": return stats.ratingBlitz;
+        case "rapid": return stats.ratingRapid;
+        case "classical": return stats.ratingClassical;
+        default: return stats.ratingRapid;
+      }
+    })();
+
+    const ratings = history.map((h) => h.ratingAfter);
+    const peakRating = ratings.length > 0 ? Math.max(...ratings) : currentRating;
+    const lowestRating = ratings.length > 0 ? Math.min(...ratings) : currentRating;
 
     return ok({
       timingCategory,
-      history: [],
-      currentRating: stats?.ratingRapid ?? 1200,
-      peakRating: stats?.ratingRapid ?? 1200,
-      lowestRating: stats?.ratingRapid ?? 1200,
+      history: history.map((h) => ({
+        date: h.createdAt.toISOString(),
+        rating: h.ratingAfter,
+        change: h.ratingChange,
+        gameId: h.gameId ?? null,
+      })),
+      currentRating,
+      peakRating,
+      lowestRating,
     });
+  } catch (err) {
+    console.error("[GET /api/users/[id]/rating-history]", err);
+    return Errors.internal();
   }
-
-  const ratings = history.map((h) => h.ratingAfter);
-  const currentRating = history[0].ratingAfter;
-  const peakRating = Math.max(...ratings);
-  const lowestRating = Math.min(...ratings);
-
-  return ok({
-    timingCategory,
-    history: history.reverse().map((h) => ({
-      date: h.createdAt.toISOString(),
-      rating: h.ratingAfter,
-      change: h.ratingChange,
-      gameId: h.gameId,
-    })),
-    currentRating,
-    peakRating,
-    lowestRating,
-  });
 }

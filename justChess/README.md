@@ -6,13 +6,30 @@ First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
+
+## Database
+
+This project uses Drizzle ORM with PostgreSQL.
+
+Generate migrations from `src/db/schema.ts`:
+
+```bash
+npm run db:generate
+```
+
+Apply schema changes directly to the configured database:
+
+```bash
+npm run db:push
+```
+
+Open Drizzle Studio:
+
+```bash
+npm run db:studio
+```
+
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

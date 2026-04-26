@@ -1,3 +1,6 @@
+// Load environment variables
+require("dotenv").config({ path: ".env.local" });
+
 // Custom Node.js server integrating Next.js + Socket.IO
 // This is required because Next.js API routes don't support WebSocket upgrades natively.
 // Run with: node server.js

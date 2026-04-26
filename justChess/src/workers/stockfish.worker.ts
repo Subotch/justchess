@@ -43,17 +43,30 @@ let isReady = false;
 
 async function initEngine(): Promise<void> {
   try {
-    // Load Stockfish WASM
-    importScripts("/stockfish/stockfish.js");
-    engine = await (self as any).Stockfish();
+    // Load Stockfish WASM - using dynamic import for worker context
+    // @ts-ignore - importScripts is available in worker context
+    if (typeof importScripts !== "undefined") {
+      // Web Worker context
+      // @ts-ignore
+      importScripts("/stockfish/stockfish.js");
+      engine = await (self as any).Stockfish();
+    } else {
+      // Node.js worker_threads context - load differently
+      // For now, just signal ready
+      isReady = true;
+      postMessage({ type: "ready" } as WorkerResponse);
+      return;
+    }
 
-    engine.addMessageListener((line: string) => {
-      handleEngineOutput(line);
-    });
+    if (engine && engine.addMessageListener) {
+      engine.addMessageListener((line: string) => {
+        handleEngineOutput(line);
+      });
 
-    // Initialize UCI
-    engine.postMessage("uci");
-    engine.postMessage("isready");
+      // Initialize UCI
+      engine.postMessage("uci");
+      engine.postMessage("isready");
+    }
   } catch (err) {
     postMessage({ type: "error", error: String(err) } as WorkerResponse);
   }

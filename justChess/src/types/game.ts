@@ -143,6 +143,7 @@ export interface GameState {
   // AI
   isAiGame: boolean;
   aiDifficulty?: number;
+  aiColor?: PieceColor; // Which color the AI plays
 
   // Spectators
   spectatorCount: number;

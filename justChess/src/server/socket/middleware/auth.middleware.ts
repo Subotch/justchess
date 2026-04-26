@@ -1,6 +1,6 @@
 /**
  * Socket.IO authentication middleware
- * Validates the session token from the handshake and attaches user data to socket.
+ * Validates the session cookie/token before allowing connection
  */
 
 import type { Socket } from "socket.io";
@@ -11,7 +11,7 @@ export async function authenticateSocket(
   next: (err?: Error) => void
 ): Promise<void> {
   try {
-    // Token can come from auth handshake or cookie
+    // Extract session token from handshake auth or cookie
     const token =
       socket.handshake.auth?.token ||
       parseCookieToken(socket.handshake.headers.cookie);
@@ -24,7 +24,7 @@ export async function authenticateSocket(
     const { auth } = await import("@/lib/auth");
     const session = await auth.api.getSession({
       headers: new Headers({
-        cookie: `better-auth.session_token=${token}`,
+        cookie: socket.handshake.headers.cookie || "",
       }),
     });
 
@@ -41,15 +41,15 @@ export async function authenticateSocket(
     const { db } = await import("@/db");
     const { users } = await import("@/db/schema");
     const { eq } = await import("drizzle-orm");
-
     await db
       .update(users)
-      .set({ isOnline: true, lastSeenAt: new Date() })
-      .where(eq(users.id, session.user.id));
+      .set({ isOnline: true })
+      .where(eq(users.id, session.user.id))
+      .catch(console.error);
 
     next();
-  } catch (error) {
-    console.error("[Socket Auth] Error:", error);
+  } catch (err) {
+    console.error("[Socket Auth] Error:", err);
     next(new Error("Authentication failed"));
   }
 }
@@ -57,5 +57,5 @@ export async function authenticateSocket(
 function parseCookieToken(cookieHeader?: string): string | null {
   if (!cookieHeader) return null;
   const match = cookieHeader.match(/better-auth\.session_token=([^;]+)/);
-  return match ? match[1] : null;
+  return match ? decodeURIComponent(match[1]) : null;
 }

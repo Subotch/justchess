@@ -126,7 +126,7 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
     [isMyTurn, fen, myColor, preferences, readOnly]
   );
 
-  const executeMove = (from: string, to: string, promotion?: string) => {
+  const executeMove = (from: string, to: string, promotion?: "q" | "r" | "b" | "n") => {
     if (onMove) {
       onMove(from, to, promotion);
     } else {
@@ -138,7 +138,7 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
     setLegalMoves([]);
   };
 
-  const handlePromotion = (piece: string) => {
+  const handlePromotion = (piece: "q" | "r" | "b" | "n") => {
     if (promotionMove) {
       executeMove(promotionMove.from, promotionMove.to, piece);
     }
@@ -168,7 +168,7 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
       {promotionSquare && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 rounded">
           <div className="bg-slate-800 rounded-xl p-4 flex gap-3">
-            {["q", "r", "b", "n"].map((piece) => (
+            {(["q", "r", "b", "n"] as const).map((piece) => (
               <button
                 key={piece}
                 onClick={() => handlePromotion(piece)}

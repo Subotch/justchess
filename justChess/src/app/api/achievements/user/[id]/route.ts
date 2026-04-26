@@ -1,11 +1,11 @@
 /**
- * GET /api/achievements/user/[id]
+ * GET /api/achievements/user/[id] — achievements for a specific user
  */
 
 import { NextRequest } from "next/server";
 import { achievementService } from "@/services/achievement.service";
 import { ok, Errors } from "@/lib/api-response";
-import { apiLimiter, withRateLimit } from "@/lib/rate-limit";
+import { withRateLimit, apiLimiter } from "@/lib/rate-limit";
 
 export async function GET(
   req: NextRequest,
@@ -16,17 +16,31 @@ export async function GET(
 
   const { id } = await params;
 
-  const achievements = await achievementService.getUserAchievements(id);
+  try {
+    const achievements = await achievementService.getUserAchievements(id);
 
-  const earnedCount = achievements.filter((a) => a.earned).length;
-  const totalPoints = achievements
-    .filter((a) => a.earned)
-    .reduce((sum, a) => sum + (a.points ?? 0), 0);
+    const earned = achievements.filter((a) => a.earned);
+    const totalPoints = earned.reduce((sum, a) => sum + a.points, 0);
 
-  return ok({
-    achievements,
-    totalPoints,
-    earnedCount,
-    totalCount: achievements.length,
-  });
+    return ok({
+      achievements: achievements.map((a) => ({
+        id: a.id,
+        name: a.name,
+        description: a.isSecret && !a.earned ? "???" : a.description,
+        category: a.category,
+        iconUrl: a.iconUrl ?? null,
+        points: a.points,
+        isSecret: a.isSecret,
+        earned: a.earned,
+        earnedAt: a.earnedAt ?? null,
+        gameId: a.gameId ?? null,
+      })),
+      totalPoints,
+      earnedCount: earned.length,
+      totalCount: achievements.length,
+    });
+  } catch (err) {
+    console.error("[GET /api/achievements/user/[id]]", err);
+    return Errors.internal();
+  }
 }

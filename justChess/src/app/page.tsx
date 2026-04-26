@@ -5,9 +5,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { db } from "@/db";
-import { games } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
 
 export default async function HomePage() {
   const session = await auth.api.getSession({ headers: await headers() });

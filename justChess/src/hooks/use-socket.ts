@@ -11,6 +11,7 @@ import { useGameStore } from "@/stores/game-store";
 import { useLobbyStore } from "@/stores/lobby-store";
 import { notify } from "@/stores/notification-store";
 import type { ClientToServerEvents, ServerToClientEvents } from "@/types/socket";
+import type { PieceColor } from "@/types/game";
 
 type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -18,13 +19,14 @@ let socketInstance: AppSocket | null = null;
 
 function getSocket(): AppSocket {
   if (!socketInstance) {
-    socketInstance = io(process.env.NEXT_PUBLIC_APP_URL ?? "", {
-      path: "/api/socket",
+    socketInstance = io(process.env.NEXT_PUBLIC_APP_URL || window.location.origin, {
+      path: "/socket.io",
       transports: ["websocket", "polling"],
       autoConnect: false,
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      withCredentials: true,
     }) as AppSocket;
   }
   return socketInstance;
@@ -34,6 +36,7 @@ export function useSocket() {
   const socketRef = useRef<AppSocket | null>(null);
   const {
     setGame,
+    setMyColor,
     applyMove,
     updateClocks,
     setGameEnded,
@@ -54,9 +57,24 @@ export function useSocket() {
     }
 
     // ── Game events ──────────────────────────────────────────────────
-    socket.on("game:started", (data) => {
-      setGame(data.game);
-      notify.info("Game started!", `Playing as ${data.color}`);
+    socket.on("game:started", ({ game }) => {
+      setGame(game);
+      // Determine my color based on game structure
+      // For AI games: if aiColor is "black", human is white; if aiColor is "white", human is black
+      // For human vs human: need to check white.id or black.id against current user
+      let myColor: PieceColor = "white";
+      
+      if (game.isAiGame) {
+        myColor = (game.aiColor as PieceColor) === "black" ? "white" : "black";
+      } else {
+        // For human vs human, we would need to compare player IDs
+        // For now, use a simple heuristic: the first player to join is white
+        // This should be improved with proper session handling
+        myColor = "white";
+      }
+      
+      setMyColor(myColor);
+      notify.info("Game started!", `Playing as ${myColor}`);
     });
 
     socket.on("game:move_made", (data) => {
@@ -64,7 +82,7 @@ export function useSocket() {
     });
 
     socket.on("game:clock_update", (data) => {
-      updateClocks(data.whiteMs, data.blackMs);
+      updateClocks(data.whiteTimeRemainingMs, data.blackTimeRemainingMs);
     });
 
     socket.on("game:ended", (data) => {
@@ -116,7 +134,7 @@ export function useSocket() {
 
     // ── Error events ─────────────────────────────────────────────────
     socket.on("error:invalid_move", (data) => {
-      notify.error("Invalid move", data.message);
+      notify.error("Invalid move", data.reason);
     });
 
     socket.on("error:generic", (data) => {
@@ -146,7 +164,7 @@ export function useSocket() {
   }, []);
 
   const makeMove = useCallback(
-    (gameId: string, from: string, to: string, promotion?: string) => {
+    (gameId: string, from: string, to: string, promotion?: "q" | "r" | "b" | "n") => {
       socketRef.current?.emit("game:move", { gameId, from, to, promotion });
     },
     []

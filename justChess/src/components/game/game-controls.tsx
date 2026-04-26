@@ -17,16 +17,16 @@ export function GameControls({ gameId }: GameControlsProps) {
   const { resign, offerDraw, acceptDraw, declineDraw } = useSocket();
   const [showResignConfirm, setShowResignConfirm] = useState(false);
 
-  const isPlaying = game?.status === "playing";
+  const isActive = game?.status === "active";
   const isMyTurn = game?.currentTurn === myColor;
 
-  if (!isPlaying) {
+  if (!isActive || game?.result !== "in_progress") {
     return (
       <div className="bg-slate-800 rounded-xl p-4 text-center">
         <p className="text-slate-400 text-sm">Game over</p>
         {game?.result && (
           <p className="text-white font-bold mt-1 capitalize">
-            {game.result === "white" ? "White wins" : game.result === "black" ? "Black wins" : "Draw"}
+            {game.result === "white_wins" ? "White wins" : game.result === "black_wins" ? "Black wins" : "Draw"}
           </p>
         )}
         {game?.resultReason && (

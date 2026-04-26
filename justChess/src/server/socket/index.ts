@@ -16,6 +16,12 @@ import { registerSpectatorHandlers } from "./handlers/spectator.handler";
 import { authenticateSocket } from "./middleware/auth.middleware";
 import { clockManager } from "./clock-manager";
 
+// --- ДОБАВЛЕННЫЕ ИМПОРТЫ ---
+import { eq } from "drizzle-orm";
+import { db } from "@/db"; 
+import { users } from "@/db/schema";
+// ---------------------------
+
 export type AppServer = Server<
   ClientToServerEvents,
   ServerToClientEvents,
@@ -64,6 +70,7 @@ export function registerSocketHandlers(io: AppServer): void {
 
           // Schedule forfeit if no reconnect within 60s
           clockManager.scheduleReconnectTimeout(gameId, userId, 60_000, async () => {
+            // Динамический импорт здесь можно оставить, так как он внутри асинхронного коллбэка
             const { gameService } = await import("@/services/game.service");
             await gameService.resign(gameId, userId);
             io.to(room).emit("game:ended", {
@@ -76,16 +83,13 @@ export function registerSocketHandlers(io: AppServer): void {
         }
       }
 
+      // --- ИСПРАВЛЕННЫЙ БЛОК ОБНОВЛЕНИЯ БД ---
       // Mark user offline in DB (fire-and-forget)
-      import("@/db").then(({ db }) =>
-        import("@/db/schema").then(({ users }) =>
-          db
-            .update(users)
-            .set({ isOnline: false, lastSeenAt: new Date() })
-            .where(import("drizzle-orm").then(({ eq }) => eq(users.id, userId)))
-            .catch(console.error)
-        )
-      );
+      db.update(users)
+        .set({ isOnline: false, lastSeenAt: new Date() })
+        .where(eq(users.id, userId))
+        .catch((error) => console.error("[Socket] Failed to update user status:", error));
+      // ----------------------------------------
     });
   });
 

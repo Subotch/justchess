@@ -1,177 +1,321 @@
 /**
- * Socket.IO lobby handlers — matchmaking and friend challenges
+ * Socket.IO lobby event handlers — matchmaking and friend challenges
  */
 
 import type { Socket } from "socket.io";
 import type { AppServer } from "../index";
 import type { SocketData } from "@/types/socket";
 import { matchmakingQueue } from "../matchmaking";
-import { SOCKET_ROOMS } from "@/types/socket";
+import { gameService } from "@/services/game.service";
 
 type AppSocket = Socket<any, any, any, SocketData>;
 
+// In-memory challenge store: challengeId → challenge data
+interface Challenge {
+  id: string;
+  fromUserId: string;
+  fromUsername: string;
+  fromRating: number;
+  toUserId: string;
+  timeControlMinutes: number;
+  incrementSeconds: number;
+  expiresAt: number;
+  timer: NodeJS.Timeout;
+}
+
+const pendingChallenges = new Map<string, Challenge>();
+
 export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
-  const { userId, username } = socket.data;
-
-  // ── lobby:join_queue ───────────────────────────────────────────────
-  socket.on("lobby:join_queue", async ({ gameType, timeControlMinutes, incrementSeconds }) => {
-    if (socket.data.isInQueue) return;
-    if (socket.data.currentGameId) {
-      socket.emit("error:generic", {
-        code: "ALREADY_IN_GAME",
-        message: "You are already in a game",
-      });
-      return;
-    }
-
-    socket.data.isInQueue = true;
-    socket.join(SOCKET_ROOMS.lobby);
-
-    // Get user rating
-    const { db } = await import("@/db");
-    const { userStats } = await import("@/db/schema");
-    const { eq } = await import("drizzle-orm");
-    const { getTimingCategory } = await import("@/types/game");
-
-    const stats = await db.query.userStats.findFirst({
-      where: eq(userStats.userId, userId),
-    });
-
-    const timingCategory = getTimingCategory(timeControlMinutes);
-    const rating =
-      timingCategory === "bullet"
-        ? stats?.ratingBullet ?? 1200
-        : timingCategory === "blitz"
-        ? stats?.ratingBlitz ?? 1200
-        : timingCategory === "rapid"
-        ? stats?.ratingRapid ?? 1200
-        : stats?.ratingClassical ?? 1200;
-
-    // Try to find a match
-    const match = matchmakingQueue.findMatch({
-      userId,
-      username,
-      rating,
-      request: { gameType, timeControlMinutes, incrementSeconds },
-      joinedAt: Date.now(),
-    });
-
-    if (match) {
-      // Create game
-      const { gameService } = await import("@/services/game.service");
-
-      // Randomly assign colors
-      const whiteIsRequester = Math.random() < 0.5;
-      const whiteId = whiteIsRequester ? userId : match.userId;
-      const blackId = whiteIsRequester ? match.userId : userId;
-
-      const game = await gameService.createGame({
-        whitePlayerId: whiteId,
-        blackPlayerId: blackId,
-        gameType,
-        timeControlMinutes,
-        incrementSeconds,
-      });
-
-      await gameService.startGame(game.id);
-
-      // Notify both players
-      const myColor = whiteIsRequester ? "white" : "black";
-      const opponentColor = whiteIsRequester ? "black" : "white";
-
-      socket.emit("lobby:match_found", {
-        gameId: game.id,
-        opponent: { id: match.userId, username: match.username, rating: match.rating },
-        color: myColor,
-      });
-
-      io.to(`user:${match.userId}`).emit("lobby:match_found", {
-        gameId: game.id,
-        opponent: { id: userId, username, rating },
-        color: opponentColor,
-      });
-
-      socket.data.isInQueue = false;
-      socket.leave(SOCKET_ROOMS.lobby);
-    } else {
-      // Add to queue
-      matchmakingQueue.add({
-        userId,
-        username,
-        rating,
-        request: { gameType, timeControlMinutes, incrementSeconds },
-        joinedAt: Date.now(),
-      });
-
-      socket.emit("lobby:queue_update", {
-        position: matchmakingQueue.getPosition(userId),
-        estimatedWaitSeconds: 30,
-      });
-    }
-  });
-
-  // ── lobby:leave_queue ──────────────────────────────────────────────
-  socket.on("lobby:leave_queue", () => {
-    matchmakingQueue.remove(userId);
-    socket.data.isInQueue = false;
-    socket.leave(SOCKET_ROOMS.lobby);
-  });
-
-  // ── lobby:challenge_friend ─────────────────────────────────────────
-  socket.on("lobby:challenge_friend", async ({ friendId, timeControlMinutes, incrementSeconds }) => {
-    const challengeId = `challenge_${Date.now()}_${userId}`;
-    const expiresAt = new Date(Date.now() + 60_000).toISOString(); // 60s to accept
-
-    // Get challenger rating
-    const { db } = await import("@/db");
-    const { userStats } = await import("@/db/schema");
-    const { eq } = await import("drizzle-orm");
-
-    const stats = await db.query.userStats.findFirst({
-      where: eq(userStats.userId, userId),
-    });
-
-    io.to(`user:${friendId}`).emit("lobby:challenge_received", {
-      challengeId,
-      from: { id: userId, username, rating: stats?.ratingRapid ?? 1200 },
+  // ── lobby:join_queue ─────────────────────────────────────────────────
+  socket.on(
+    "lobby:join_queue",
+    async ({
+      gameType,
       timeControlMinutes,
       incrementSeconds,
-      expiresAt,
-    });
+    }: {
+      gameType: "rated" | "casual";
+      timeControlMinutes: number;
+      incrementSeconds: number;
+    }) => {
+      try {
+        const { userId, username } = socket.data;
+
+        // Get user rating
+        const { db } = await import("@/db");
+        const { userStats } = await import("@/db/schema");
+        const { eq } = await import("drizzle-orm");
+        const { getTimingCategory } = await import("@/types/game");
+
+        const stats = await db.query.userStats.findFirst({
+          where: eq(userStats.userId, userId),
+        });
+
+        const timingCategory = getTimingCategory(timeControlMinutes);
+        let rating = 1200;
+        if (stats) {
+          switch (timingCategory) {
+            case "bullet": rating = stats.ratingBullet; break;
+            case "blitz": rating = stats.ratingBlitz; break;
+            case "rapid": rating = stats.ratingRapid; break;
+            case "classical": rating = stats.ratingClassical; break;
+          }
+        }
+
+        const entry = {
+          userId,
+          username,
+          rating,
+          request: { gameType, timeControlMinutes, incrementSeconds },
+          joinedAt: Date.now(),
+        };
+
+        // Try to find a match immediately
+        const opponent = matchmakingQueue.findMatch(entry);
+
+        if (opponent) {
+          // Create game
+          const isWhite = Math.random() < 0.5;
+          const game = await gameService.createGame({
+            whitePlayerId: isWhite ? userId : opponent.userId,
+            blackPlayerId: isWhite ? opponent.userId : userId,
+            gameType,
+            timeControlMinutes,
+            incrementSeconds,
+          });
+
+          const myColor = isWhite ? "white" : "black";
+          const opponentColor = isWhite ? "black" : "white";
+
+          // Notify both players
+          socket.emit("lobby:match_found", {
+            gameId: game.id,
+            opponent: {
+              id: opponent.userId,
+              username: opponent.username,
+              rating: opponent.rating,
+            },
+            color: myColor,
+          });
+
+          io.to(`user:${opponent.userId}`).emit("lobby:match_found", {
+            gameId: game.id,
+            opponent: { id: userId, username, rating },
+            color: opponentColor,
+          });
+
+          socket.data.isInQueue = false;
+        } else {
+          // Add to queue
+          matchmakingQueue.add(entry);
+          socket.data.isInQueue = true;
+          socket.join("lobby");
+
+          const position = matchmakingQueue.getPosition(userId);
+          socket.emit("lobby:queue_update", {
+            position,
+            estimatedWaitSeconds: position * 15,
+          });
+
+          // Periodically try to match (every 5 seconds)
+          const matchInterval = setInterval(async () => {
+            if (!socket.data.isInQueue) {
+              clearInterval(matchInterval);
+              return;
+            }
+
+            const updatedEntry = {
+              ...entry,
+              joinedAt: entry.joinedAt, // keep original join time for range expansion
+            };
+
+            const found = matchmakingQueue.findMatch(updatedEntry);
+            if (found) {
+              clearInterval(matchInterval);
+              matchmakingQueue.remove(userId);
+              socket.data.isInQueue = false;
+
+              const isWhite2 = Math.random() < 0.5;
+              const game2 = await gameService.createGame({
+                whitePlayerId: isWhite2 ? userId : found.userId,
+                blackPlayerId: isWhite2 ? found.userId : userId,
+                gameType,
+                timeControlMinutes,
+                incrementSeconds,
+              });
+
+              const myColor2 = isWhite2 ? "white" : "black";
+              const opponentColor2 = isWhite2 ? "black" : "white";
+
+              socket.emit("lobby:match_found", {
+                gameId: game2.id,
+                opponent: { id: found.userId, username: found.username, rating: found.rating },
+                color: myColor2,
+              });
+
+              io.to(`user:${found.userId}`).emit("lobby:match_found", {
+                gameId: game2.id,
+                opponent: { id: userId, username, rating },
+                color: opponentColor2,
+              });
+            } else {
+              const pos = matchmakingQueue.getPosition(userId);
+              if (pos > 0) {
+                socket.emit("lobby:queue_update", {
+                  position: pos,
+                  estimatedWaitSeconds: pos * 15,
+                });
+              }
+            }
+          }, 5000);
+
+          // Clean up interval on disconnect
+          socket.once("disconnect", () => {
+            clearInterval(matchInterval);
+            matchmakingQueue.remove(userId);
+          });
+        }
+      } catch (err) {
+        console.error("[lobby:join_queue]", err);
+        socket.emit("error:generic", { code: "INTERNAL", message: "Failed to join queue" });
+      }
+    }
+  );
+
+  // ── lobby:leave_queue ────────────────────────────────────────────────
+  socket.on("lobby:leave_queue", () => {
+    matchmakingQueue.remove(socket.data.userId);
+    socket.data.isInQueue = false;
+    socket.leave("lobby");
   });
 
-  // ── lobby:accept_challenge ─────────────────────────────────────────
-  socket.on("lobby:accept_challenge", async ({ challengeId }) => {
-    // Extract challenger userId from challengeId
-    const parts = challengeId.split("_");
-    const challengerId = parts[2];
+  // ── lobby:challenge_friend ───────────────────────────────────────────
+  socket.on(
+    "lobby:challenge_friend",
+    async ({
+      friendId,
+      timeControlMinutes,
+      incrementSeconds,
+    }: {
+      friendId: string;
+      timeControlMinutes: number;
+      incrementSeconds: number;
+    }) => {
+      try {
+        const { userId, username } = socket.data;
 
-    const { gameService } = await import("@/services/game.service");
+        // Get challenger rating
+        const { db } = await import("@/db");
+        const { userStats } = await import("@/db/schema");
+        const { eq } = await import("drizzle-orm");
+        const { getTimingCategory } = await import("@/types/game");
 
-    // Create game (challenger is white by default, or random)
-    const whiteIsChallenger = Math.random() < 0.5;
-    const game = await gameService.createGame({
-      whitePlayerId: whiteIsChallenger ? challengerId : userId,
-      blackPlayerId: whiteIsChallenger ? userId : challengerId,
-      gameType: "casual",
-      timeControlMinutes: 10,
-      incrementSeconds: 0,
-    });
+        const stats = await db.query.userStats.findFirst({
+          where: eq(userStats.userId, userId),
+        });
+        const timingCategory = getTimingCategory(timeControlMinutes);
+        let rating = 1200;
+        if (stats) {
+          switch (timingCategory) {
+            case "bullet": rating = stats.ratingBullet; break;
+            case "blitz": rating = stats.ratingBlitz; break;
+            case "rapid": rating = stats.ratingRapid; break;
+            case "classical": rating = stats.ratingClassical; break;
+          }
+        }
 
-    await gameService.startGame(game.id);
+        const challengeId = `challenge_${Date.now()}_${userId}`;
+        const expiresAt = Date.now() + 60_000; // 60 seconds to accept
 
-    socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
-    io.to(`user:${challengerId}`).emit("lobby:challenge_accepted", {
-      challengeId,
-      gameId: game.id,
-    });
-  });
+        const timer = setTimeout(() => {
+          pendingChallenges.delete(challengeId);
+        }, 60_000);
 
-  // ── lobby:decline_challenge ────────────────────────────────────────
-  socket.on("lobby:decline_challenge", ({ challengeId }) => {
-    const parts = challengeId.split("_");
-    const challengerId = parts[2];
+        const challenge: Challenge = {
+          id: challengeId,
+          fromUserId: userId,
+          fromUsername: username,
+          fromRating: rating,
+          toUserId: friendId,
+          timeControlMinutes,
+          incrementSeconds,
+          expiresAt,
+          timer,
+        };
 
-    io.to(`user:${challengerId}`).emit("lobby:challenge_declined", { challengeId });
-  });
+        pendingChallenges.set(challengeId, challenge);
+
+        // Notify the friend
+        io.to(`user:${friendId}`).emit("lobby:challenge_received", {
+          challengeId,
+          from: { id: userId, username, rating },
+          timeControlMinutes,
+          incrementSeconds,
+          expiresAt: new Date(expiresAt).toISOString(),
+        });
+      } catch (err) {
+        console.error("[lobby:challenge_friend]", err);
+        socket.emit("error:generic", { code: "INTERNAL", message: "Failed to send challenge" });
+      }
+    }
+  );
+
+  // ── lobby:accept_challenge ───────────────────────────────────────────
+  socket.on(
+    "lobby:accept_challenge",
+    async ({ challengeId }: { challengeId: string }) => {
+      try {
+        const challenge = pendingChallenges.get(challengeId);
+        if (!challenge) {
+          socket.emit("error:generic", { code: "NOT_FOUND", message: "Challenge not found or expired" });
+          return;
+        }
+
+        if (challenge.toUserId !== socket.data.userId) {
+          socket.emit("error:generic", { code: "FORBIDDEN", message: "Not your challenge" });
+          return;
+        }
+
+        // Clear expiry timer
+        clearTimeout(challenge.timer);
+        pendingChallenges.delete(challengeId);
+
+        // Create game (challenger is white by default, or random)
+        const isWhite = Math.random() < 0.5;
+        const game = await gameService.createGame({
+          whitePlayerId: isWhite ? challenge.fromUserId : challenge.toUserId,
+          blackPlayerId: isWhite ? challenge.toUserId : challenge.fromUserId,
+          gameType: "casual",
+          timeControlMinutes: challenge.timeControlMinutes,
+          incrementSeconds: challenge.incrementSeconds,
+        });
+
+        // Notify both players
+        socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
+        io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
+          challengeId,
+          gameId: game.id,
+        });
+      } catch (err) {
+        console.error("[lobby:accept_challenge]", err);
+        socket.emit("error:generic", { code: "INTERNAL", message: "Failed to accept challenge" });
+      }
+    }
+  );
+
+  // ── lobby:decline_challenge ──────────────────────────────────────────
+  socket.on(
+    "lobby:decline_challenge",
+    ({ challengeId }: { challengeId: string }) => {
+      const challenge = pendingChallenges.get(challengeId);
+      if (!challenge) return;
+
+      clearTimeout(challenge.timer);
+      pendingChallenges.delete(challengeId);
+
+      io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_declined", {
+        challengeId,
+      });
+    }
+  );
 }

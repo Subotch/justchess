@@ -4,9 +4,34 @@
  */
 
 import { betterAuth } from "better-auth";
+import { createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
+
+// OAuth configuration - only include if credentials are properly set (not dev placeholders)
+const hasGoogleOAuth =
+  process.env.GOOGLE_CLIENT_ID &&
+  !process.env.GOOGLE_CLIENT_ID.includes("dev-");
+const hasGithubOAuth =
+  process.env.GITHUB_CLIENT_ID &&
+  !process.env.GITHUB_CLIENT_ID.includes("dev-");
+
+const socialProviders = {
+  ...(hasGoogleOAuth && {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    },
+  }),
+  ...(hasGithubOAuth && {
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    },
+  }),
+};
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -28,21 +53,12 @@ export const auth = betterAuth({
   },
 
   // OAuth providers
-  socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    },
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    },
-  },
+  socialProviders,
 
   // Session configuration
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days
-    updateAge: 60 * 60 * 24,       // refresh if older than 1 day
+    updateAge: 60 * 60 * 24, // refresh if older than 1 day
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60, // 5 minutes
@@ -81,31 +97,41 @@ export const auth = betterAuth({
     },
   },
 
+  baseURL:
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000",
+
   // Trusted origins for CORS
   trustedOrigins: [
-    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+    process.env.BETTER_AUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000",
   ],
 
-  // Hooks — run after user creation to seed stats
   hooks: {
-    after: [
-      {
-        matcher: (context) => context.path === "/sign-up/email",
-        handler: async (context) => {
-          // Seed user_stats row after registration
-          const userId = (context.context as any)?.newSession?.userId;
-          if (userId) {
-            try {
-              const { userStats } = await import("@/db/schema");
-              const { db: database } = await import("@/db");
-              await database.insert(userStats).values({ userId }).onConflictDoNothing();
-            } catch (e) {
-              console.error("Failed to seed user stats:", e);
-            }
-          }
-        },
-      },
-    ],
+    after: createAuthMiddleware(async (ctx) => {
+      if (!ctx.path.startsWith("/sign-up")) {
+        return;
+      }
+
+      const newUser = ctx.context.newSession?.user;
+      if (!newUser?.id) {
+        return;
+      }
+
+      const existingStats = await db.query.userStats.findFirst({
+        where: eq(schema.userStats.userId, newUser.id),
+      });
+
+      if (existingStats) {
+        return;
+      }
+
+      await db.insert(schema.userStats).values({
+        userId: newUser.id,
+      });
+    }),
   },
 });
 

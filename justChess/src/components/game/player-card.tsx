@@ -6,10 +6,10 @@
 
 import { useEffect, useState } from "react";
 import { formatTime, formatTimePrecise } from "@/lib/chess-engine";
-import type { GamePlayerState } from "@/types/game";
+import type { GamePlayer } from "@/types/game";
 
 interface PlayerCardProps {
-  player: GamePlayerState;
+  player: GamePlayer & { isActive: boolean };
   isTop: boolean;
 }
 
@@ -24,7 +24,7 @@ export function PlayerCard({ player, isTop }: PlayerCardProps) {
     if (!player.isActive || player.timeRemainingMs <= 0) return;
 
     const interval = setInterval(() => {
-      setDisplayMs((prev) => Math.max(0, prev - 100));
+      setDisplayMs((prev: number) => Math.max(0, prev - 100));
     }, 100);
 
     return () => clearInterval(interval);
