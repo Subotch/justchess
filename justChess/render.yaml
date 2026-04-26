@@ -1,0 +1,17 @@
+не services:
+  - type: web
+    name: justchess
+    env: node
+    buildCommand: npm ci && npm run build
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8080
+      - key: DATABASE_URL
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_APP_URL
+        sync: false
