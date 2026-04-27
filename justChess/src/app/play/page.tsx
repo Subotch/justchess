@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSocket } from "@/hooks/use-socket";
 import { useLobbyStore } from "@/stores/lobby-store";
+import { useTranslation } from "@/lib/i18n";
 
 const TIME_CONTROLS = [
   { label: "Bullet 1+0", minutes: 1, increment: 0, category: "bullet" },
@@ -24,6 +25,7 @@ const TIME_CONTROLS = [
 
 export default function PlayPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { joinQueue, leaveQueue } = useSocket();
   const { queue, leaveQueue: leaveQueueStore } = useLobbyStore();
   const [selectedControl, setSelectedControl] = useState(TIME_CONTROLS[6]);
@@ -41,7 +43,7 @@ export default function PlayPage() {
   return (
     <div className="min-h-screen bg-slate-900 text-white p-8">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Find a Game</h1>
+        <h1 className="text-3xl font-bold mb-8" suppressHydrationWarning>{t('play.title')}</h1>
 
         {/* Game Type */}
         <div className="flex gap-4 mb-6">
@@ -55,7 +57,7 @@ export default function PlayPage() {
                   : "bg-slate-700 text-slate-300 hover:bg-slate-600"
               }`}
             >
-              {type}
+              <span suppressHydrationWarning>{t(`play.${type}`)}</span>
             </button>
           ))}
         </div>
@@ -81,18 +83,18 @@ export default function PlayPage() {
         {/* Queue Status */}
         {queue.isInQueue ? (
           <div className="bg-slate-800 rounded-xl p-6 text-center">
-            <div className="text-2xl mb-2 animate-pulse">🔍 Searching...</div>
-            <p className="text-slate-400 mb-1">
-              Looking for a {selectedControl.label} opponent
+            <div className="text-2xl mb-2 animate-pulse" suppressHydrationWarning>🔍 {t('play.searching')}</div>
+            <p className="text-slate-400 mb-1" suppressHydrationWarning>
+              {t('play.searching')} {selectedControl.label}
             </p>
-            <p className="text-slate-500 text-sm mb-4">
-              Queue position: #{queue.position} · ~{queue.estimatedWaitSeconds}s
+            <p className="text-slate-500 text-sm mb-4" suppressHydrationWarning>
+              {t('play.queuePosition', { position: queue.position })} · ~{queue.estimatedWaitSeconds}s
             </p>
             <button
               onClick={handleLeaveQueue}
               className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-lg font-semibold transition-colors"
             >
-              Cancel
+              <span suppressHydrationWarning>{t('common.cancel')}</span>
             </button>
           </div>
         ) : (
@@ -100,7 +102,7 @@ export default function PlayPage() {
             onClick={handleJoinQueue}
             className="w-full py-4 bg-green-500 hover:bg-green-400 rounded-xl font-bold text-lg transition-colors"
           >
-            Play {selectedControl.label} · {gameType}
+            <span suppressHydrationWarning>{t('play.joinQueue')} · {t(`play.${gameType}`)}</span>
           </button>
         )}
 
@@ -110,7 +112,7 @@ export default function PlayPage() {
             onClick={() => router.push("/play/ai")}
             className="text-slate-400 hover:text-white transition-colors text-sm"
           >
-            Or play against the computer →
+            <span suppressHydrationWarning>{t('play.vsAI')} →</span>
           </button>
         </div>
       </div>

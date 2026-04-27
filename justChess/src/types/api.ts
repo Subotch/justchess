@@ -93,6 +93,7 @@ export interface UserPreferences {
 export interface UserProfileResponse {
   id: string;
   username: string | null;
+  friendCode: string;
   name: string;
   image: string | null;
   bio: string | null;
@@ -166,7 +167,8 @@ export interface RatingHistoryResponse {
 // ─────────────────────────────────────────────
 
 export interface FriendRequestPayload {
-  addresseeId: string;
+  addresseeId?: string;
+  friendCode?: string;
 }
 
 export interface FriendListItem {
@@ -174,6 +176,7 @@ export interface FriendListItem {
   user: {
     id: string;
     username: string | null;
+    friendCode: string;
     name: string;
     image: string | null;
     isOnline: boolean;
@@ -181,7 +184,7 @@ export interface FriendListItem {
     ratingRapid: number;
     ratingBlitz: number;
   };
-  status: "pending" | "accepted";
+  status: "pending" | "accepted" | "rejected" | "blocked";
   direction: "sent" | "received";
   createdAt: string;
 }

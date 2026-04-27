@@ -7,6 +7,7 @@ import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { eq } from "drizzle-orm";
+import { customAlphabet } from "nanoid";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 
@@ -32,6 +33,23 @@ const socialProviders = {
     },
   }),
 };
+
+const generateFriendCode = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", 8);
+
+async function createUniqueFriendCode() {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const friendCode = generateFriendCode();
+    const existingUser = await db.query.users.findFirst({
+      where: eq(schema.users.friendCode, friendCode),
+    });
+
+    if (!existingUser) {
+      return friendCode;
+    }
+  }
+
+  throw new Error("Failed to generate unique friend code");
+}
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -69,6 +87,11 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       username: {
+        type: "string",
+        required: false,
+        unique: true,
+      },
+      friendCode: {
         type: "string",
         required: false,
         unique: true,
@@ -123,6 +146,20 @@ export const auth = betterAuth({
       const existingStats = await db.query.userStats.findFirst({
         where: eq(schema.userStats.userId, newUser.id),
       });
+
+      const existingUser = await db.query.users.findFirst({
+        where: eq(schema.users.id, newUser.id),
+      });
+
+      if (existingUser && !existingUser.friendCode) {
+        await db
+          .update(schema.users)
+          .set({
+            friendCode: await createUniqueFriendCode(),
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.users.id, newUser.id));
+      }
 
       if (existingStats) {
         return;

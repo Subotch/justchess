@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
+import { useTranslation } from "@/lib/i18n";
 import { AI_DIFFICULTY_LEVELS } from "@/types/game";
 import type { PieceColor } from "@/types/game";
 
@@ -19,6 +20,7 @@ const TIME_CONTROLS = [
 
 export default function PlayAiPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: session } = useSession();
   const [difficulty, setDifficulty] = useState(5);
   const [color, setColor] = useState<PieceColor | "random">("random");
@@ -67,14 +69,14 @@ export default function PlayAiPage() {
             onClick={() => router.back()}
             className="text-slate-400 hover:text-white transition-colors"
           >
-            ← Back
+            <span suppressHydrationWarning>← {t('common.back')}</span>
           </button>
-          <h1 className="text-3xl font-bold">Play vs Computer</h1>
+          <h1 className="text-3xl font-bold" suppressHydrationWarning>{t('play.vsAI')}</h1>
         </div>
 
         {/* Difficulty selector */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Difficulty</h2>
+          <h2 className="text-lg font-semibold mb-4" suppressHydrationWarning>{t('play.difficulty')} (Placeholder)</h2>
 
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
@@ -119,7 +121,7 @@ export default function PlayAiPage() {
 
         {/* Color selection */}
         <div className="bg-slate-800 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4">Play as</h2>
+          <h2 className="text-lg font-semibold mb-4" suppressHydrationWarning>{t('play.playAs')} (Placeholder)</h2>
           <div className="flex gap-3">
             {(["white", "random", "black"] as const).map((c) => (
               <button
@@ -139,7 +141,7 @@ export default function PlayAiPage() {
 
         {/* Time control */}
         <div className="bg-slate-800 rounded-xl p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">Time Control</h2>
+          <h2 className="text-lg font-semibold mb-4" suppressHydrationWarning>{t('play.timeControl')}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {TIME_CONTROLS.map((tc) => (
               <button
@@ -162,7 +164,7 @@ export default function PlayAiPage() {
           disabled={loading}
           className="w-full py-4 bg-green-500 hover:bg-green-400 disabled:bg-green-800 disabled:cursor-not-allowed rounded-xl font-bold text-lg transition-colors"
         >
-          {loading ? "Starting..." : `Play vs ${selectedLevel.name}`}
+          <span suppressHydrationWarning>{loading ? t('common.loading') : `Play vs ${selectedLevel.name}`}</span>
         </button>
       </div>
     </div>

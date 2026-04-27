@@ -94,6 +94,7 @@ export const users = pgTable(
     image: text("image"),
     // Chess-specific profile fields
     username: varchar("username", { length: 30 }).unique(),
+    friendCode: varchar("friend_code", { length: 8 }).notNull().unique(),
     bio: text("bio"),
     country: varchar("country", { length: 2 }), // ISO 3166-1 alpha-2
     isOnline: boolean("is_online").notNull().default(false),

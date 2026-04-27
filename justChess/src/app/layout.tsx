@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { NotificationContainer } from "@/components/ui/notification-container";
 import { UserMenu } from "@/components/ui/user-menu";
+import { HomeButton } from "@/components/ui/home-button";
 import { SettingsPanel } from "@/components/ui/settings-panel";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -29,6 +30,10 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Providers>
+          <div className="fixed top-4 left-4 z-50 flex flex-col gap-3 sm:flex-row">
+            <HomeButton />
+            <SettingsPanel />
+          </div>
           <UserMenu />
           {children}
           <NotificationContainer />

@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useGameStore } from "@/stores/game-store";
 import { useSocket } from "@/hooks/use-socket";
 
@@ -13,9 +14,11 @@ interface GameControlsProps {
 }
 
 export function GameControls({ gameId }: GameControlsProps) {
+  const router = useRouter();
   const { game, myColor, drawOfferedByOpponent, drawOfferedByMe } = useGameStore();
   const { resign, offerDraw, acceptDraw, declineDraw } = useSocket();
   const [showResignConfirm, setShowResignConfirm] = useState(false);
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
 
   const isActive = game?.status === "active";
   const isMyTurn = game?.currentTurn === myColor;
@@ -104,6 +107,38 @@ export function GameControls({ gameId }: GameControlsProps) {
           </div>
         )}
       </div>
+
+      {!showBackConfirm ? (
+        <button
+          onClick={() => setShowBackConfirm(true)}
+          className="w-full rounded-lg border border-slate-700 bg-slate-900/70 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-700"
+        >
+          Назад
+        </button>
+      ) : (
+        <div className="rounded-lg border border-amber-700 bg-amber-950/40 p-3">
+          <p className="mb-3 text-sm text-amber-200">
+            Если выйти сейчас, партия завершится поражением из-за сдачи. Подтвердить?
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                resign(gameId);
+                router.push("/play");
+              }}
+              className="flex-1 rounded-lg bg-amber-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-amber-500"
+            >
+              Подтвердить
+            </button>
+            <button
+              onClick={() => setShowBackConfirm(false)}
+              className="flex-1 rounded-lg bg-slate-700 py-2 text-sm text-white transition-colors hover:bg-slate-600"
+            >
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Turn indicator */}
       <div className={`text-center text-sm py-1 rounded ${isMyTurn ? "text-green-400" : "text-slate-400"}`}>

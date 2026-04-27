@@ -1,89 +1,38 @@
 /**
  * Home page — landing / lobby
  */
+"use client";
 
 import Link from "next/link";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { useTranslation } from "@/lib/i18n";
 
-export default async function HomePage() {
-  const session = await auth.api.getSession({ headers: await headers() });
+export default function HomePage() {
+  const { t } = useTranslation();
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {/* Hero */}
-      <section className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 pt-20">
-        <h1 className="text-5xl md:text-7xl font-bold text-white mb-4 tracking-tight">
-          Just Chess
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-slate-900 to-slate-800 px-4 py-10 text-white dark:from-slate-950 dark:to-slate-900">
+      <div className="mx-auto max-w-3xl text-center">
+        <h1 className="mb-4 text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl" suppressHydrationWarning>
+          {t('home.title')}
         </h1>
-        <p className="text-xl text-slate-400 mb-8 max-w-xl">
-          Play chess online with friends, compete in rated matches, or challenge AI opponents.
+        <p className="mb-8 text-xl text-slate-300 dark:text-slate-400 sm:text-2xl" suppressHydrationWarning>
+          {t('home.subtitle')}
         </p>
-
-        <div className="flex flex-wrap gap-4 justify-center">
-          {session?.user ? (
-            <>
-              <Link
-                href="/play"
-                className="px-8 py-3 bg-green-500 hover:bg-green-400 text-white font-semibold rounded-lg transition-colors text-lg"
-              >
-                Play Now
-              </Link>
-              <Link
-                href="/play/ai"
-                className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors text-lg"
-              >
-                vs Computer
-              </Link>
-            </>
-          ) : (
-            <>
-              <Link
-                href="/auth/sign-up"
-                className="px-8 py-3 bg-green-500 hover:bg-green-400 text-white font-semibold rounded-lg transition-colors text-lg"
-              >
-                Get Started
-              </Link>
-              <Link
-                href="/auth/sign-in"
-                className="px-8 py-3 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-lg transition-colors text-lg"
-              >
-                Sign In
-              </Link>
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="max-w-5xl mx-auto px-4 py-16 grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[
-          {
-            icon: "♟",
-            title: "Rated Matches",
-            desc: "Compete in bullet, blitz, rapid, and classical time controls with ELO rating.",
-          },
-          {
-            icon: "🤖",
-            title: "AI Opponents",
-            desc: "Challenge Stockfish at 20+ difficulty levels from beginner to grandmaster.",
-          },
-          {
-            icon: "👁",
-            title: "Watch Live",
-            desc: "Spectate ongoing games in real-time and learn from top players.",
-          },
-        ].map((f) => (
-          <div
-            key={f.title}
-            className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center"
+        <div className="flex flex-col gap-4 sm:flex-row sm:justify-center">
+          <Link
+            href="/play"
+            className="inline-flex items-center justify-center rounded-xl bg-green-500 px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-green-400 hover:shadow-lg hover:shadow-green-500/25"
           >
-            <div className="text-4xl mb-3">{f.icon}</div>
-            <h3 className="text-white font-semibold text-lg mb-2">{f.title}</h3>
-            <p className="text-slate-400 text-sm">{f.desc}</p>
-          </div>
-        ))}
-      </section>
+            <span suppressHydrationWarning>{t('home.cta')}</span>
+          </Link>
+          <Link
+            href="/friends"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-600 bg-slate-800/50 px-8 py-4 text-lg font-semibold text-white transition-all hover:bg-slate-700 hover:shadow-lg dark:border-slate-700 dark:bg-slate-800/30"
+          >
+            <span suppressHydrationWarning>{t('nav.friends')}</span>
+          </Link>
+        </div>
+      </div>
     </main>
   );
 }

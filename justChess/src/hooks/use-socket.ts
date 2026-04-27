@@ -46,7 +46,7 @@ export function useSocket() {
     setOpponentReconnected,
     setSpectatorCount,
   } = useGameStore();
-  const { leaveQueue, updateQueuePosition, setPendingChallenge } = useLobbyStore();
+  const { leaveQueue, updateQueuePosition, setPendingChallenge, clearPendingChallenge } = useLobbyStore();
 
   useEffect(() => {
     const socket = getSocket();
@@ -132,6 +132,27 @@ export function useSocket() {
       );
     });
 
+    socket.on("lobby:challenge_accepted", (data) => {
+      clearPendingChallenge();
+      notify.success("Challenge accepted", "Starting game...");
+    });
+
+    socket.on("lobby:challenge_declined", (data) => {
+      clearPendingChallenge();
+      notify.info("Challenge declined", "Your friend declined the challenge");
+    });
+
+    socket.on("social:friend_online", (data) => {
+      notify.info("Friend online", `${data.username} is now online`);
+      // Trigger a refresh of friends list - can be handled by component
+      window.dispatchEvent(new CustomEvent("friend-status-change", { detail: { userId: data.userId, isOnline: true } }));
+    });
+
+    socket.on("social:friend_offline", (data) => {
+      notify.info("Friend offline", `${data.username} went offline`);
+      window.dispatchEvent(new CustomEvent("friend-status-change", { detail: { userId: data.userId, isOnline: false } }));
+    });
+
     // ── Error events ─────────────────────────────────────────────────
     socket.on("error:invalid_move", (data) => {
       notify.error("Invalid move", data.reason);
@@ -154,6 +175,10 @@ export function useSocket() {
       socket.off("lobby:match_found");
       socket.off("lobby:queue_update");
       socket.off("lobby:challenge_received");
+      socket.off("lobby:challenge_accepted");
+      socket.off("lobby:challenge_declined");
+      socket.off("social:friend_online");
+      socket.off("social:friend_offline");
       socket.off("error:invalid_move");
       socket.off("error:generic");
     };
@@ -201,6 +226,25 @@ export function useSocket() {
     socketRef.current?.emit("lobby:leave_queue");
   }, []);
 
+  const challengeFriend = useCallback(
+    (friendId: string, timeControlMinutes: number, incrementSeconds: number) => {
+      socketRef.current?.emit("lobby:challenge_friend", {
+        friendId,
+        timeControlMinutes,
+        incrementSeconds,
+      });
+    },
+    []
+  );
+
+  const acceptChallenge = useCallback((challengeId: string) => {
+    socketRef.current?.emit("lobby:accept_challenge", { challengeId });
+  }, []);
+
+  const declineChallenge = useCallback((challengeId: string) => {
+    socketRef.current?.emit("lobby:decline_challenge", { challengeId });
+  }, []);
+
   const joinSpectator = useCallback((gameId: string) => {
     socketRef.current?.emit("spectator:join", { gameId });
   }, []);
@@ -219,6 +263,9 @@ export function useSocket() {
     declineDraw,
     joinQueue,
     leaveQueue: leaveQueueSocket,
+    challengeFriend,
+    acceptChallenge,
+    declineChallenge,
     joinSpectator,
     leaveSpectator,
   };

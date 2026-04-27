@@ -78,6 +78,7 @@ export async function GET(
     return ok({
       id: user.id,
       username: user.username,
+      friendCode: user.friendCode,
       name: user.name,
       image: user.image,
       bio: user.bio,

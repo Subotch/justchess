@@ -17,9 +17,9 @@ import { authenticateSocket } from "./middleware/auth.middleware";
 import { clockManager } from "./clock-manager";
 
 // --- ДОБАВЛЕННЫЕ ИМПОРТЫ ---
-import { eq } from "drizzle-orm";
+import { eq, or, and } from "drizzle-orm";
 import { db } from "@/db"; 
-import { users } from "@/db/schema";
+import { users, friendships as friendshipsTable } from "@/db/schema";
 // ---------------------------
 
 export type AppServer = Server<
@@ -34,12 +34,40 @@ export function registerSocketHandlers(io: AppServer): void {
   io.use(authenticateSocket);
 
   // ── Connection handler ─────────────────────────────────────────────
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const { userId, username } = socket.data;
     console.log(`[Socket] Connected: ${username} (${userId}) — ${socket.id}`);
 
     // Join personal room for direct notifications
     socket.join(`user:${userId}`);
+
+    // Mark user online and notify friends
+    await db.update(users)
+      .set({ isOnline: true, lastSeenAt: new Date() })
+      .where(eq(users.id, userId))
+      .catch((error) => console.error("[Socket] Failed to update user status:", error));
+
+    // Get user's friends and notify them
+    const userFriendships = await db.query.friendships.findMany({
+      where: and(
+        or(
+          eq(friendshipsTable.requesterId, userId),
+          eq(friendshipsTable.addresseeId, userId)
+        ),
+        eq(friendshipsTable.status, "accepted")
+      ),
+    });
+
+    const friendIds = userFriendships.map((f: any) => 
+      f.requesterId === userId ? f.addresseeId : f.requesterId
+    );
+
+    for (const friendId of friendIds) {
+      io.to(`user:${friendId}`).emit("social:friend_online", {
+        userId,
+        username: username || "Unknown",
+      });
+    }
 
     // Register domain-specific handlers
     registerGameHandlers(io, socket);
@@ -89,6 +117,27 @@ export function registerSocketHandlers(io: AppServer): void {
         .set({ isOnline: false, lastSeenAt: new Date() })
         .where(eq(users.id, userId))
         .catch((error) => console.error("[Socket] Failed to update user status:", error));
+
+      // Notify friends that user went offline
+      db.query.friendships.findMany({
+        where: and(
+          or(
+            eq(friendshipsTable.requesterId, userId),
+            eq(friendshipsTable.addresseeId, userId)
+          ),
+          eq(friendshipsTable.status, "accepted")
+        ),
+      }).then((friendshipsList: any[]) => {
+        const friendIds = friendshipsList.map((f) => 
+          f.requesterId === userId ? f.addresseeId : f.requesterId
+        );
+        for (const friendId of friendIds) {
+          io.to(`user:${friendId}`).emit("social:friend_offline", {
+            userId,
+            username: username || "Unknown",
+          });
+        }
+      }).catch(console.error);
       // ----------------------------------------
     });
   });

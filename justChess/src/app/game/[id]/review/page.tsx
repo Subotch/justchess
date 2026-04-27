@@ -6,6 +6,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslation } from "@/lib/i18n";
 import { ChessBoard } from "@/components/game/chess-board";
 import { MoveList } from "@/components/game/move-list";
 import { parsePgnPositions } from "@/lib/chess-engine";
@@ -22,6 +23,7 @@ interface Position {
 }
 
 export default function ReviewPage({ params }: ReviewPageProps) {
+  const { t } = useTranslation();
   const { id: gameId } = use(params);
   const router = useRouter();
   const [positions, setPositions] = useState<Position[]>([]);
@@ -38,7 +40,7 @@ export default function ReviewPage({ params }: ReviewPageProps) {
         const res = await fetch(`/api/games/${gameId}`);
         const data = await res.json();
         if (!data.success) {
-          setError("Game not found");
+          setError(t('common.error'));
           return;
         }
         if (data.data.pgn) {
@@ -48,13 +50,13 @@ export default function ReviewPage({ params }: ReviewPageProps) {
           setCurrentIndex(parsed.length - 1);
         }
       } catch {
-        setError("Failed to load game");
+        setError(t('common.error'));
       } finally {
         setLoading(false);
       }
     }
     loadGame();
-  }, [gameId]);
+  }, [gameId, t]);
 
   const currentFen =
     currentIndex === -1
@@ -77,7 +79,7 @@ export default function ReviewPage({ params }: ReviewPageProps) {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400">Loading game...</p>
+        <p className="text-slate-400" suppressHydrationWarning>{t('common.loading')}</p>
       </div>
     );
   }
@@ -91,7 +93,7 @@ export default function ReviewPage({ params }: ReviewPageProps) {
             onClick={() => router.push("/")}
             className="px-4 py-2 bg-slate-700 rounded-lg text-white"
           >
-            Go Home
+            {t('common.back')}
           </button>
         </div>
       </div>
@@ -115,15 +117,15 @@ export default function ReviewPage({ params }: ReviewPageProps) {
             onClick={() => router.back()}
             className="text-slate-400 hover:text-white transition-colors"
           >
-            ← Back
+            <span suppressHydrationWarning>← {t('common.back')}</span>
           </button>
-          <h1 className="text-xl font-bold">Game Review</h1>
+          <h1 className="text-xl font-bold" suppressHydrationWarning>{t('game.analysis')}</h1>
           <a
             href={`/api/games/${gameId}/pgn`}
             download
             className="ml-auto text-sm text-slate-400 hover:text-white transition-colors"
           >
-            Download PGN
+            <span suppressHydrationWarning>{t('common.download')}</span>
           </a>
         </div>
 
@@ -152,10 +154,10 @@ export default function ReviewPage({ params }: ReviewPageProps) {
               >
                 ◀
               </button>
-              <span className="text-slate-400 text-sm min-w-[80px] text-center">
+              <span className="text-slate-400 text-sm min-w-[80px] text-center" suppressHydrationWarning>
                 {currentIndex === -1
-                  ? "Start"
-                  : `Move ${currentIndex + 1} / ${positions.length}`}
+                  ? t('game.waitingForOpponent')
+                  : `${t('common.next')} ${currentIndex + 1} / ${positions.length}`}
               </span>
               <button
                 onClick={() =>

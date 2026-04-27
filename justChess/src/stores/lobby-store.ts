@@ -35,6 +35,8 @@ interface LobbyStore {
   setLiveGames: (games: LiveGame[]) => void;
   setPendingChallenge: (challenge: LobbyStore["pendingChallenge"]) => void;
   clearPendingChallenge: () => void;
+  acceptPendingChallenge: () => { challengeId: string } | null;
+  declinePendingChallenge: () => void;
 }
 
 const initialQueue: QueueState = {
@@ -77,4 +79,26 @@ export const useLobbyStore = create<LobbyStore>((set) => ({
   setPendingChallenge: (challenge) => set({ pendingChallenge: challenge }),
 
   clearPendingChallenge: () => set({ pendingChallenge: null }),
+
+  acceptPendingChallenge: (): { challengeId: string } | null => {
+    let result: { challengeId: string } | null = null;
+    useLobbyStore.setState((state) => {
+      if (state.pendingChallenge) {
+        result = { challengeId: state.pendingChallenge.challengeId };
+      }
+      return { pendingChallenge: null };
+    });
+    return result;
+  },
+
+  declinePendingChallenge: (): { challengeId: string } | null => {
+    let result: { challengeId: string } | null = null;
+    useLobbyStore.setState((state) => {
+      if (state.pendingChallenge) {
+        result = { challengeId: state.pendingChallenge.challengeId };
+      }
+      return { pendingChallenge: null };
+    });
+    return result;
+  },
 }));

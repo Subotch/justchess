@@ -14,7 +14,15 @@ import { withRateLimit, apiLimiter, friendLimiter } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const requestSchema = z.object({
-  addresseeId: z.string().min(1),
+  addresseeId: z.string().min(1).optional(),
+  friendCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{8}$/)
+    .optional(),
+}).refine((value) => value.addresseeId || value.friendCode, {
+  message: "Either addresseeId or friendCode is required",
 });
 
 // GET /api/friends/list
@@ -35,11 +43,11 @@ export async function GET(req: NextRequest) {
       ),
       with: {
         requester: {
-          columns: { id: true, username: true, name: true, image: true, isOnline: true, lastSeenAt: true },
+          columns: { id: true, username: true, friendCode: true, name: true, image: true, isOnline: true, lastSeenAt: true },
           with: { stats: { columns: { ratingRapid: true, ratingBlitz: true } } },
         },
         addressee: {
-          columns: { id: true, username: true, name: true, image: true, isOnline: true, lastSeenAt: true },
+          columns: { id: true, username: true, friendCode: true, name: true, image: true, isOnline: true, lastSeenAt: true },
           with: { stats: { columns: { ratingRapid: true, ratingBlitz: true } } },
         },
       },
@@ -55,6 +63,7 @@ export async function GET(req: NextRequest) {
         user: {
           id: otherUser.id,
           username: otherUser.username,
+          friendCode: otherUser.friendCode,
           name: otherUser.name,
           image: otherUser.image,
           isOnline: otherUser.isOnline,
@@ -90,24 +99,28 @@ export async function POST(req: NextRequest) {
       return Errors.badRequest("Validation failed");
     }
 
-    const { addresseeId } = parsed.data;
+    const { addresseeId, friendCode } = parsed.data;
     const requesterId = session.user.id;
 
-    if (requesterId === addresseeId) {
+    const addressee = addresseeId
+      ? await db.query.users.findFirst({
+          where: eq(users.id, addresseeId),
+        })
+      : await db.query.users.findFirst({
+          where: eq(users.friendCode, friendCode!),
+        });
+
+    if (requesterId === addressee?.id) {
       return Errors.badRequest("Cannot send friend request to yourself");
     }
 
-    // Check if addressee exists
-    const addressee = await db.query.users.findFirst({
-      where: eq(users.id, addresseeId),
-    });
     if (!addressee) return Errors.notFound("User");
 
     // Check for existing friendship
     const existing = await db.query.friendships.findFirst({
       where: or(
-        and(eq(friendships.requesterId, requesterId), eq(friendships.addresseeId, addresseeId)),
-        and(eq(friendships.requesterId, addresseeId), eq(friendships.addresseeId, requesterId))
+        and(eq(friendships.requesterId, requesterId), eq(friendships.addresseeId, addressee.id)),
+        and(eq(friendships.requesterId, addressee.id), eq(friendships.addresseeId, requesterId))
       ),
     });
 
@@ -119,7 +132,7 @@ export async function POST(req: NextRequest) {
 
     const [friendship] = await db
       .insert(friendships)
-      .values({ requesterId, addresseeId, status: "pending" })
+      .values({ requesterId, addresseeId: addressee.id, status: "pending" })
       .returning();
 
     return ok({ friendshipId: friendship.id, status: "pending" }, 201);

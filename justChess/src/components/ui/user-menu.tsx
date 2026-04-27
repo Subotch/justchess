@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "@/lib/auth-client";
+import { useTranslation } from "@/lib/i18n";
 
 export function UserMenu() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -39,6 +42,7 @@ export function UserMenu() {
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
+          suppressHydrationWarning
           className="flex items-center gap-3 rounded-full border border-slate-700 bg-slate-800/95 px-3 py-2 text-white shadow-lg transition-colors hover:bg-slate-700"
         >
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-green-500 font-bold text-white">
@@ -55,12 +59,25 @@ export function UserMenu() {
         </button>
 
         {open && (
-          <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-700 bg-slate-800 p-3 shadow-2xl">
+          <div
+            className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-700 bg-slate-800 p-3 shadow-2xl"
+            suppressHydrationWarning
+          >
             <div className="mb-3 border-b border-slate-700 pb-3">
               <p className="truncate text-sm font-semibold text-white">
                 {session.user.name || "User"}
               </p>
               <p className="truncate text-xs text-slate-400">{session.user.email}</p>
+            </div>
+
+            <div className="mb-3 flex flex-col gap-2">
+              <Link
+                href="/friends"
+                onClick={() => setOpen(false)}
+                className="w-full rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600"
+              >
+                <span suppressHydrationWarning>{t('nav.friends')}</span>
+              </Link>
             </div>
 
             <button
@@ -69,7 +86,7 @@ export function UserMenu() {
               disabled={loading}
               className="w-full rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-900"
             >
-              {loading ? "Signing out..." : "Sign out"}
+              <span suppressHydrationWarning>{loading ? t('common.loading') : t('nav.signOut')}</span>
             </button>
           </div>
         )}
