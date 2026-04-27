@@ -4,26 +4,108 @@
  * /auth/sign-up — Registration page
  */
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signUp, signIn } from "@/lib/auth-client";
 import { useTranslation } from "@/lib/i18n";
 
+interface AvailabilityCheck {
+  usernameAvailable: boolean;
+  emailAvailable: boolean;
+  usernameError: string | null;
+  emailError: string | null;
+}
+
 export default function SignUpPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const [form, setForm] = useState({ name: "", username: "", email: "", password: "" });
+  const [availability, setAvailability] = useState<AvailabilityCheck>({
+    usernameAvailable: true,
+    emailAvailable: true,
+    usernameError: null,
+    emailError: null,
+  });
+  const [checking, setChecking] = useState({ username: false, email: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const checkAvailability = useCallback(async () => {
+    if (!form.username.trim() && !form.email.trim()) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/check-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: form.username.trim(),
+          email: form.email.trim(),
+        }),
+      });
+
+      const data = await response.json();
+      setAvailability(data);
+    } catch (error) {
+      console.error("Error checking availability:", error);
+    }
+  }, [form.username, form.email]);
+
+  // Debounced check for username
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (form.username.trim().length >= 3) {
+        setChecking((prev) => ({ ...prev, username: true }));
+        checkAvailability();
+        setChecking((prev) => ({ ...prev, username: false }));
+      } else {
+        setAvailability((prev) => ({
+          ...prev,
+          usernameAvailable: true,
+          usernameError: null,
+        }));
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [form.username, checkAvailability]);
+
+  // Debounced check for email
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (form.email.trim().length >= 5) {
+        setChecking((prev) => ({ ...prev, email: true }));
+        checkAvailability();
+        setChecking((prev) => ({ ...prev, email: false }));
+      } else {
+        setAvailability((prev) => ({
+          ...prev,
+          emailAvailable: true,
+          emailError: null,
+        }));
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [form.email, checkAvailability]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    setError("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // Final validation before submit
+    if (!availability.usernameAvailable || !availability.emailAvailable) {
+      setError("Пожалуйста, исправьте ошибки в форме");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -102,19 +184,70 @@ export default function SignUpPage() {
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1" suppressHydrationWarning>
-                {t('auth.name')}
+                {t('auth.username')}
               </label>
-              <input
-                type="text"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-                minLength={2}
-                maxLength={100}
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-green-500 transition-colors"
-                placeholder={t('auth.name')}
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  name="username"
+                  value={form.username}
+                  onChange={handleChange}
+                  required
+                  minLength={3}
+                  maxLength={30}
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-green-500 transition-colors pr-10"
+                  placeholder={t('auth.username')}
+                />
+                {form.username.trim().length >= 3 && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {checking.username ? (
+                      <div className="w-4 h-4 border-2 border-slate-500 border-t-green-500 rounded-full animate-spin" />
+                    ) : availability.usernameAvailable ? (
+                      <div className="w-4 h-4 bg-green-500 rounded-full" />
+                    ) : (
+                      <div className="w-4 h-4 bg-red-500 rounded-full" />
+                    )}
+                  </div>
+                )}
+              </div>
+              {form.username.trim().length >= 3 && !availability.usernameAvailable && (
+                <p className="text-red-400 text-xs mt-1" suppressHydrationWarning>
+                  {availability.usernameError}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1" suppressHydrationWarning>
+                {t('auth.email')}
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  name="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-green-500 transition-colors pr-10"
+                  placeholder="you@example.com"
+                />
+                {form.email.trim().length >= 5 && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {checking.email ? (
+                      <div className="w-4 h-4 border-2 border-slate-500 border-t-green-500 rounded-full animate-spin" />
+                    ) : availability.emailAvailable ? (
+                      <div className="w-4 h-4 bg-green-500 rounded-full" />
+                    ) : (
+                      <div className="w-4 h-4 bg-red-500 rounded-full" />
+                    )}
+                  </div>
+                )}
+              </div>
+              {form.email.trim().length >= 5 && !availability.emailAvailable && (
+                <p className="text-red-400 text-xs mt-1" suppressHydrationWarning>
+                  {availability.emailError}
+                </p>
+              )}
             </div>
 
             <div>
