@@ -1,21 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useTheme } from "next-themes";
 import { useTranslation } from "@/lib/i18n";
 import { useUserStore } from "@/stores/user-store";
 import type { Locale } from "@/lib/i18n";
 import { Moon, Sun, Monitor, Globe, Volume2, VolumeX, Settings, Palette } from "lucide-react";
+import * as Switch from "@radix-ui/react-switch";
 
 export function SettingsPanel() {
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
   const { t, locale, setLocale } = useTranslation();
   const { preferences, updatePreferences, resetPreferences } = useUserStore();
 
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (open && panelRef.current && !panelRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
   return (
     <div>
-      <div className="relative">
+      <div className="relative" ref={panelRef}>
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
@@ -111,19 +124,13 @@ export function SettingsPanel() {
                     )}
                     <span suppressHydrationWarning>{t('settings.sound')}</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => updatePreferences({ soundEnabled: !preferences.soundEnabled })}
-                    className={`relative h-6 w-11 rounded-full transition-colors ${
-                      preferences.soundEnabled ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'
-                    }`}
+                  <Switch.Root
+                    checked={preferences.soundEnabled}
+                    onCheckedChange={(checked) => updatePreferences({ soundEnabled: checked })}
+                    className="relative h-6 w-11 rounded-full bg-slate-300 data-[state=checked]:bg-blue-500 dark:bg-slate-600 transition-colors"
                   >
-                    <span
-                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        preferences.soundEnabled ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
+                    <Switch.Thumb className="block h-5 w-5 rounded-full bg-white shadow transition-transform translate-x-0.5 data-[state=checked]:translate-x-5" />
+                  </Switch.Root>
                 </label>
               </div>
 
@@ -135,36 +142,24 @@ export function SettingsPanel() {
                 
                 <label className="mb-3 flex items-center justify-between">
                   <span className="text-slate-600 dark:text-slate-400" suppressHydrationWarning>{t('settings.coordinates')}</span>
-                  <button
-                    type="button"
-                    onClick={() => updatePreferences({ showCoordinates: !preferences.showCoordinates })}
-                    className={`relative h-6 w-11 rounded-full transition-colors ${
-                      preferences.showCoordinates ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'
-                    }`}
+                  <Switch.Root
+                    checked={preferences.showCoordinates}
+                    onCheckedChange={(checked) => updatePreferences({ showCoordinates: checked })}
+                    className="relative h-6 w-11 rounded-full bg-slate-300 data-[state=checked]:bg-blue-500 dark:bg-slate-600 transition-colors"
                   >
-                    <span
-                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        preferences.showCoordinates ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
+                    <Switch.Thumb className="block h-5 w-5 rounded-full bg-white shadow transition-transform translate-x-0.5 data-[state=checked]:translate-x-5" />
+                  </Switch.Root>
                 </label>
 
                 <label className="flex items-center justify-between">
                   <span className="text-slate-600 dark:text-slate-400" suppressHydrationWarning>{t('settings.autoPromote')}</span>
-                  <button
-                    type="button"
-                    onClick={() => updatePreferences({ autoPromoteToQueen: !preferences.autoPromoteToQueen })}
-                    className={`relative h-6 w-11 rounded-full transition-colors ${
-                      preferences.autoPromoteToQueen ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'
-                    }`}
+                  <Switch.Root
+                    checked={preferences.autoPromoteToQueen}
+                    onCheckedChange={(checked) => updatePreferences({ autoPromoteToQueen: checked })}
+                    className="relative h-6 w-11 rounded-full bg-slate-300 data-[state=checked]:bg-blue-500 dark:bg-slate-600 transition-colors"
                   >
-                    <span
-                      className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        preferences.autoPromoteToQueen ? 'translate-x-5' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </button>
+                    <Switch.Thumb className="block h-5 w-5 rounded-full bg-white shadow transition-transform translate-x-0.5 data-[state=checked]:translate-x-5" />
+                  </Switch.Root>
                 </label>
               </div>
             </div>

@@ -135,6 +135,8 @@ export function useSocket() {
     socket.on("lobby:challenge_accepted", (data) => {
       clearPendingChallenge();
       notify.success("Challenge accepted", "Starting game...");
+      // Redirect to game page
+      window.location.href = `/game/${data.gameId}`;
     });
 
     socket.on("lobby:challenge_declined", (data) => {
