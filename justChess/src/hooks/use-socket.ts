@@ -10,6 +10,7 @@ import { io, Socket } from "socket.io-client";
 import { useGameStore } from "@/stores/game-store";
 import { useLobbyStore } from "@/stores/lobby-store";
 import { notify } from "@/stores/notification-store";
+import { useSession } from "@/lib/auth-client";
 import type { ClientToServerEvents, ServerToClientEvents } from "@/types/socket";
 import type { PieceColor } from "@/types/game";
 
@@ -34,6 +35,7 @@ function getSocket(): AppSocket {
 
 export function useSocket() {
   const socketRef = useRef<AppSocket | null>(null);
+  const { data: session } = useSession();
   const {
     setGame,
     setMyColor,
@@ -61,16 +63,21 @@ export function useSocket() {
       setGame(game);
       // Determine my color based on game structure
       // For AI games: if aiColor is "black", human is white; if aiColor is "white", human is black
-      // For human vs human: need to check white.id against current user
+      // For human vs human: check white/black player IDs against current user
       let myColor: PieceColor = "white";
       
       if (game.isAiGame) {
         myColor = (game.aiColor as PieceColor) === "black" ? "white" : "black";
-      } else {
-        // For human vs human, we would need to compare player IDs
-        // For now, use a simple heuristic: the first player to join is white
-        // This should be improved with proper session handling
-        myColor = "white";
+      } else if (session?.user?.id) {
+        // For human vs human, compare player IDs with current session user
+        if (game.white.id === session.user.id) {
+          myColor = "white";
+        } else if (game.black.id === session.user.id) {
+          myColor = "black";
+        } else {
+          // Spectator case - default to white (shouldn't happen for player)
+          myColor = "white";
+        }
       }
       
       setMyColor(myColor);

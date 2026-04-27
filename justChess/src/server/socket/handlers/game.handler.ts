@@ -161,14 +161,124 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
 
       // Notify room of reconnection if game was paused
       if (game.status === "active") {
-        const clockState = clockManager.getGameState(gameId);
-        if (clockState) {
+        const activeClockState = clockManager.getGameState(gameId);
+        if (activeClockState) {
           clockManager.resumeClock(gameId);
           socket.to(room).emit("game:opponent_reconnected", {
             gameId,
             color: game.whitePlayerId === userId ? "white" : "black",
           });
         }
+        
+        // Send game:started to newly connected player for active games
+        // This ensures the client gets the full game state when joining mid-game
+        const { getTimingCategory } = await import("@/types/game");
+        const timingCategory = getTimingCategory(game.timeControlMinutes);
+        
+        // Get ratings for players
+        const { db } = await import("@/db");
+        const { userStats } = await import("@/db/schema");
+        const { eq } = await import("drizzle-orm");
+        
+        let whiteRating = game.whiteRatingBefore ?? 1200;
+        let blackRating = game.blackRatingBefore ?? 1200;
+        
+        if (game.whitePlayerId) {
+          const ws = await db.query.userStats.findFirst({
+            where: eq(userStats.userId, game.whitePlayerId),
+          });
+          if (ws) {
+            switch (timingCategory) {
+              case "bullet": whiteRating = ws.ratingBullet; break;
+              case "blitz": whiteRating = ws.ratingBlitz; break;
+              case "rapid": whiteRating = ws.ratingRapid; break;
+              case "classical": whiteRating = ws.ratingClassical; break;
+            }
+          }
+        }
+        
+        if (game.blackPlayerId) {
+          const bs = await db.query.userStats.findFirst({
+            where: eq(userStats.userId, game.blackPlayerId),
+          });
+          if (bs) {
+            switch (timingCategory) {
+              case "bullet": blackRating = bs.ratingBullet; break;
+              case "blitz": blackRating = bs.ratingBlitz; break;
+              case "rapid": blackRating = bs.ratingRapid; break;
+              case "classical": blackRating = bs.ratingClassical; break;
+            }
+          }
+        }
+        
+        // Get existing moves
+        const existingMoves = await gameService.getGameMoves(gameId);
+        
+        // Build move list for client
+        const moves = existingMoves.map((m, idx) => ({
+          san: m.san,
+          uci: m.uci,
+          fen: m.fen,
+          moveNumber: m.moveNumber,
+          color: m.color as PieceColor,
+          timeSpentMs: m.timeSpentMs,
+        }));
+        
+        // Determine current turn from last move or default to white
+        const currentTurn = existingMoves.length > 0 
+          ? (existingMoves[existingMoves.length - 1].fen.split(" ")[1] === "w" ? "white" : "black" as PieceColor)
+          : "white";
+        
+        // Get clock times
+        const whiteTimeMs = activeClockState?.whiteTimeMs ?? (game.whiteTimeRemainingMs ?? game.timeControlMinutes * 60 * 1000);
+        const blackTimeMs = activeClockState?.blackTimeMs ?? (game.blackTimeRemainingMs ?? game.timeControlMinutes * 60 * 1000);
+        
+        socket.emit("game:started", {
+          game: {
+            id: game.id,
+            status: "active",
+            gameType: game.gameType as any,
+            timingCategory: game.timingCategory as any,
+            timeControlMinutes: game.timeControlMinutes,
+            incrementSeconds: game.incrementSeconds,
+            white: {
+              id: game.whitePlayerId!,
+              username: (game as any).whitePlayer?.username ?? "Player",
+              name: (game as any).whitePlayer?.name ?? "Player",
+              image: (game as any).whitePlayer?.image ?? null,
+              rating: whiteRating,
+              color: "white",
+              timeRemainingMs: whiteTimeMs,
+              isConnected: true,
+            },
+            black: {
+              id: game.blackPlayerId ?? "ai",
+              username: game.isAiGame
+                ? `AI Level ${game.aiDifficulty}`
+                : (game as any).blackPlayer?.username ?? "Player",
+              name: game.isAiGame
+                ? `AI Level ${game.aiDifficulty}`
+                : (game as any).blackPlayer?.name ?? "Player",
+              image: null,
+              rating: blackRating,
+              color: "black",
+              timeRemainingMs: blackTimeMs,
+              isConnected: true,
+            },
+            fen: existingMoves.length > 0 ? existingMoves[existingMoves.length - 1].fen : "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            pgn: game.pgn ?? "",
+            moves,
+            currentTurn,
+            moveCount: existingMoves.length,
+            result: game.result ?? "in_progress",
+            isAiGame: game.isAiGame,
+            aiDifficulty: game.aiDifficulty ?? undefined,
+            aiColor: (game.aiColor as PieceColor) ?? "black",
+            spectatorCount: 0,
+            startedAt: game.startedAt?.toISOString(),
+            createdAt: game.createdAt.toISOString(),
+          },
+        });
       }
     } catch (err) {
       console.error("[game:join]", err);
