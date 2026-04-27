@@ -61,7 +61,7 @@ export function useSocket() {
       setGame(game);
       // Determine my color based on game structure
       // For AI games: if aiColor is "black", human is white; if aiColor is "white", human is black
-      // For human vs human: need to check white.id or black.id against current user
+      // For human vs human: need to check white.id against current user
       let myColor: PieceColor = "white";
       
       if (game.isAiGame) {

@@ -21,17 +21,25 @@ interface GamePageProps {
 export default function GamePage({ params }: GamePageProps) {
   const { id: gameId } = use(params);
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, isPending } = useSession();
   const { joinGame } = useSocket();
   const { game, myColor } = useGameStore();
 
   useEffect(() => {
-    if (!session?.user) {
+    // Don't redirect while session is still loading
+    if (isPending) {
+      return;
+    }
+    
+    // If no session and no game in store, redirect to sign-in
+    // Game in store means user just joined from challenge accept
+    if (!session?.user && !game) {
       router.push("/auth/sign-in");
       return;
     }
+    
     joinGame(gameId);
-  }, [gameId, session]);
+  }, [gameId, session, isPending, game]);
 
   if (!game) {
     return (
