@@ -338,95 +338,16 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           incrementSeconds: challenge.incrementSeconds,
         });
 
-        // Start the game immediately
-        const startedGame = await gameService.startGame(game.id);
+        // Do NOT start the game here — let game:join handle it when both players
+        // enter the room. This avoids duplicate game:started emissions and keeps
+        // the clock off until participants are actually in the room.
 
-        // Start clock manager
-        const timeMs = challenge.timeControlMinutes * 60 * 1000;
-        const incrementMs = challenge.incrementSeconds * 1000;
-
-        clockManager.startClock(
-          game.id,
-          isWhite ? challenge.fromUserId : challenge.toUserId,
-          isWhite ? challenge.toUserId : challenge.fromUserId,
-          timeMs,
-          timeMs,
-          incrementMs,
-          "white",
-          // onTick — broadcast clock every second
-          ({ whiteTimeMs, blackTimeMs, activeColor }) => {
-            io.to(SOCKET_ROOMS.game(game.id)).emit("game:clock_update", {
-              gameId: game.id,
-              whiteTimeRemainingMs: whiteTimeMs,
-              blackTimeRemainingMs: blackTimeMs,
-              activeColor,
-            });
-          },
-          // onTimeout
-          async () => {
-            const clockState = clockManager.getGameState(game.id);
-            if (!clockState) return;
-            const timedOut = clockState.whiteTimeMs <= 0 ? "white" : "black";
-            await gameService.handleTimeout(game.id, timedOut);
-            const result = timedOut === "white" ? "black_wins" : "white_wins";
-            io.to(SOCKET_ROOMS.game(game.id)).emit("game:ended", {
-              gameId: game.id,
-              result,
-              reason: "timeout",
-              pgn: "",
-            });
-          }
-        );
-
-        const gameState = {
-          id: startedGame.id,
-          status: "active" as const,
-          gameType: "casual" as const,
-          timingCategory: startedGame.timingCategory as any,
-          timeControlMinutes: startedGame.timeControlMinutes,
-          incrementSeconds: startedGame.incrementSeconds,
-white: {
-            id: isWhite ? challenge.fromUserId : challenge.toUserId,
-            username: isWhite ? challenge.fromUsername : socket.data.username,
-            name: isWhite ? challenge.fromUsername : socket.data.username,
-            image: null,
-            rating: isWhite ? fromRating : toRating,
-            color: "white" as const,
-            timeRemainingMs: timeMs,
-            isConnected: true,
-          },
-          black: {
-            id: isWhite ? challenge.toUserId : challenge.fromUserId,
-            username: isWhite ? socket.data.username : challenge.fromUsername,
-            name: isWhite ? socket.data.username : challenge.fromUsername,
-            image: null,
-            rating: isWhite ? toRating : fromRating,
-            color: "black" as const,
-            timeRemainingMs: timeMs,
-            isConnected: true,
-          },
-          fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-          pgn: "",
-          moves: [],
-          currentTurn: "white" as const,
-          moveCount: 0,
-          result: "in_progress" as const,
-          isAiGame: false,
-          spectatorCount: 0,
-          startedAt: startedGame.startedAt?.toISOString(),
-          createdAt: startedGame.createdAt.toISOString(),
-        };
-
-        // Notify both players
+        // Notify both players with just the gameId so they can navigate.
         socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
         io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
           challengeId,
           gameId: game.id,
         });
-
-        // Send game:started to both players
-        io.to(`user:${challenge.fromUserId}`).emit("game:started", { game: gameState });
-        socket.emit("game:started", { game: gameState });
       } catch (err) {
         console.error("[lobby:accept_challenge]", err);
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to accept challenge" });

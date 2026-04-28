@@ -143,11 +143,16 @@ export const gameService = {
    * Start a game (transition from waiting → active).
    */
   async startGame(gameId: string) {
+    // Only transition waiting → active. Returns null if already active/completed.
     const [game] = await db
       .update(games)
       .set({ status: "active", startedAt: new Date() })
-      .where(eq(games.id, gameId))
+      .where(and(eq(games.id, gameId), eq(games.status, "waiting")))
       .returning();
+    if (!game) {
+      // Already started — return current state
+      return db.query.games.findFirst({ where: eq(games.id, gameId) });
+    }
     return game;
   },
 

@@ -31,15 +31,15 @@ export default function GamePage({ params }: GamePageProps) {
       return;
     }
     
-    // If no session and no game in store, redirect to sign-in
-    // Game in store means user just joined from challenge accept
-    if (!session?.user && !game) {
+    if (!session?.user) {
       router.push("/auth/sign-in");
       return;
     }
     
     joinGame(gameId);
-  }, [gameId, session, isPending, game]);
+    // NOTE: `game` intentionally excluded — including it would cause an infinite
+    // loop: game:started → setGame → effect re-runs → joinGame → game:started …
+  }, [gameId, session?.user?.id, isPending]);
 
   if (!game) {
     return (

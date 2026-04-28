@@ -60,6 +60,7 @@ export function useSocket() {
 
     // ── Game events ──────────────────────────────────────────────────
     socket.on("game:started", ({ game }) => {
+      const wasAlreadySet = !!useGameStore.getState().game;
       setGame(game);
       // Determine my color based on game structure
       // For AI games: if aiColor is "black", human is white; if aiColor is "white", human is black
@@ -81,7 +82,10 @@ export function useSocket() {
       }
       
       setMyColor(myColor);
-      notify.info("Game started!", `Playing as ${myColor}`);
+      // Only notify on the first game:started, not on reconnect re-emissions
+      if (!wasAlreadySet) {
+        notify.info("Game started!", `Playing as ${myColor}`);
+      }
     });
 
     socket.on("game:move_made", (data) => {
@@ -125,6 +129,8 @@ export function useSocket() {
     socket.on("lobby:match_found", (data) => {
       leaveQueue();
       notify.success("Match found!", `Playing against ${data.opponent.username}`);
+      // Navigate to the game page
+      window.location.href = `/game/${data.gameId}`;
     });
 
     socket.on("lobby:queue_update", (data) => {
@@ -194,7 +200,16 @@ export function useSocket() {
   }, []);
 
   const joinGame = useCallback((gameId: string) => {
-    socketRef.current?.emit("game:join", { gameId });
+    const socket = socketRef.current;
+    if (!socket) return;
+    const doJoin = () => socket.emit("game:join", { gameId });
+    if (socket.connected) {
+      doJoin();
+    } else {
+      // Socket may not be connected yet (e.g. after a full page reload).
+      // Wait for the connect event so the emit is not silently dropped.
+      socket.once("connect", doJoin);
+    }
   }, []);
 
   const makeMove = useCallback(
