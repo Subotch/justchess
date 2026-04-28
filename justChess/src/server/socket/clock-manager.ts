@@ -122,8 +122,9 @@ class ClockManager {
       state.activeColor === "white" ? state.whiteTimeMs : state.blackTimeMs;
 
     if (activeTime <= 0) {
-      this.stopClock(gameId);
+      // Save callback before stopClock, which deletes it from the map
       const onTimeout = this.timeoutCallbacks.get(gameId);
+      this.stopClock(gameId);
       if (onTimeout) onTimeout();
     }
   }

@@ -89,6 +89,9 @@ export function registerSocketHandlers(io: AppServer): void {
           const color =
             gameState.whitePlayerId === userId ? "white" : "black";
 
+          // Pause clock while player is disconnected
+          clockManager.pauseClock(gameId);
+
           // Notify room
           io.to(room).emit("game:opponent_disconnected", {
             gameId,

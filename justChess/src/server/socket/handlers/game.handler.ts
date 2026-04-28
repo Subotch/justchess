@@ -92,63 +92,63 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
             }
           );
 
-          // Build GameState for clients
-          const whiteStats = await import("@/db").then(({ db }) =>
-            import("@/db/schema").then(({ userStats }) =>
-              import("drizzle-orm").then(({ eq }) =>
-                db.query.userStats.findFirst({
-                  where: eq(userStats.userId, game.whitePlayerId!),
-                })
-              )
-            )
-          );
-
-          io.to(room).emit("game:started", {
-            game: {
-              id: started.id,
-              status: "active",
-              gameType: started.gameType as any,
-              timingCategory: started.timingCategory as any,
-              timeControlMinutes: started.timeControlMinutes,
-              incrementSeconds: started.incrementSeconds,
-              white: {
-                id: game.whitePlayerId!,
-                username: (game as any).whitePlayer?.username ?? "Player",
-                name: (game as any).whitePlayer?.name ?? "Player",
-                image: (game as any).whitePlayer?.image ?? null,
-                rating: started.whiteRatingBefore ?? 1200,
-                color: "white",
-                timeRemainingMs: timeMs,
-                isConnected: true,
-              },
-              black: {
-                id: game.blackPlayerId ?? "ai",
-                username: game.isAiGame
-                  ? `AI Level ${game.aiDifficulty}`
-                  : (game as any).blackPlayer?.username ?? "Player",
-                name: game.isAiGame
-                  ? `AI Level ${game.aiDifficulty}`
-                  : (game as any).blackPlayer?.name ?? "Player",
-                image: null,
-                rating: started.blackRatingBefore ?? 1200,
-                color: "black",
-                timeRemainingMs: timeMs,
-                isConnected: true,
-              },
-              fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-              pgn: "",
-              moves: [],
-              currentTurn: "white",
-              moveCount: 0,
-              result: "in_progress",
-              isAiGame: started.isAiGame,
-              aiDifficulty: started.aiDifficulty ?? undefined,
-              aiColor: (started.aiColor as PieceColor) ?? "black",
-              spectatorCount: 0,
-              startedAt: started.startedAt?.toISOString(),
-              createdAt: started.createdAt.toISOString(),
+          // Build initial GameState payload
+          const initialGameState = {
+            id: started.id,
+            status: "active",
+            gameType: started.gameType as any,
+            timingCategory: started.timingCategory as any,
+            timeControlMinutes: started.timeControlMinutes,
+            incrementSeconds: started.incrementSeconds,
+            white: {
+              id: game.whitePlayerId!,
+              username: (game as any).whitePlayer?.username ?? "Player",
+              name: (game as any).whitePlayer?.name ?? "Player",
+              image: (game as any).whitePlayer?.image ?? null,
+              rating: started.whiteRatingBefore ?? 1200,
+              color: "white",
+              timeRemainingMs: timeMs,
+              isConnected: true,
             },
-          });
+            black: {
+              id: game.blackPlayerId ?? "ai",
+              username: game.isAiGame
+                ? `AI Level ${game.aiDifficulty}`
+                : (game as any).blackPlayer?.username ?? "Player",
+              name: game.isAiGame
+                ? `AI Level ${game.aiDifficulty}`
+                : (game as any).blackPlayer?.name ?? "Player",
+              image: null,
+              rating: started.blackRatingBefore ?? 1200,
+              color: "black",
+              timeRemainingMs: timeMs,
+              isConnected: true,
+            },
+            fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            pgn: "",
+            moves: [],
+            currentTurn: "white",
+            moveCount: 0,
+            result: "in_progress",
+            isAiGame: started.isAiGame,
+            aiDifficulty: started.aiDifficulty ?? undefined,
+            aiColor: (started.aiColor as PieceColor) ?? "black",
+            spectatorCount: 0,
+            startedAt: started.startedAt?.toISOString(),
+            createdAt: started.createdAt.toISOString(),
+          };
+
+          // Send game:started to each participant socket individually
+          // so that a reconnecting player doesn't cause the opponent to reset
+          // their client state upon a spurious duplicate game:started.
+          for (const ps of participantSockets) {
+            (ps as any).emit("game:started", { game: initialGameState });
+          }
+          // Also send to the socket that just joined (it may not be in
+          // participantSockets yet if fetchSockets() was called before join)
+          if (!participantSockets.some((ps) => (ps as any).data?.userId === userId)) {
+            socket.emit("game:started", { game: initialGameState });
+          }
 
           // If AI plays white, make the first move
           if (started.isAiGame && started.aiColor === "white") {
@@ -351,7 +351,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
           san: result.san!,
           uci: result.uci!,
           fen: result.fen!,
-          moveNumber: 0, // will be set by client
+          moveNumber: result.moveNumber!,
           color: movedColor,
           timeSpentMs: undefined,
           clockRemainingMs: timeRemaining,

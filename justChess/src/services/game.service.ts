@@ -4,7 +4,7 @@
  */
 
 import { Chess } from "chess.js";
-import { eq, and, or, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql, asc } from "drizzle-orm";
 import { db } from "@/db";
 import {
   games,
@@ -58,6 +58,7 @@ export interface MakeMoveResult {
   uci?: string;
   fen?: string;
   pgn?: string;
+  moveNumber?: number;
   isCheck?: boolean;
   isCheckmate?: boolean;
   isStalemate?: boolean;
@@ -176,7 +177,7 @@ export const gameService = {
     const chess = new Chess();
     const existingMoves = await db.query.gameMoves.findMany({
       where: eq(gameMoves.gameId, gameId),
-      orderBy: [gameMoves.moveNumber, gameMoves.color],
+      orderBy: [asc(gameMoves.createdAt)],
     });
 
     // Replay all moves to get current position
@@ -281,6 +282,7 @@ export const gameService = {
       uci,
       fen,
       pgn,
+      moveNumber,
       isCheck,
       isCheckmate,
       isStalemate,
@@ -314,7 +316,7 @@ export const gameService = {
     const chess = new Chess();
     const existingMoves = await db.query.gameMoves.findMany({
       where: eq(gameMoves.gameId, gameId),
-      orderBy: [gameMoves.moveNumber, gameMoves.color],
+      orderBy: [asc(gameMoves.createdAt)],
     });
     for (const m of existingMoves) {
       chess.move({
@@ -367,7 +369,7 @@ export const gameService = {
     const chess = new Chess();
     const existingMoves = await db.query.gameMoves.findMany({
       where: eq(gameMoves.gameId, gameId),
-      orderBy: [gameMoves.moveNumber, gameMoves.color],
+      orderBy: [asc(gameMoves.createdAt)],
     });
     for (const m of existingMoves) {
       chess.move({
@@ -441,7 +443,7 @@ export const gameService = {
     const chess = new Chess();
     const existingMoves = await db.query.gameMoves.findMany({
       where: eq(gameMoves.gameId, gameId),
-      orderBy: [gameMoves.moveNumber, gameMoves.color],
+      orderBy: [asc(gameMoves.createdAt)],
     });
     for (const m of existingMoves) {
       chess.move({
@@ -596,7 +598,7 @@ export const gameService = {
   async getGameMoves(gameId: string) {
     return db.query.gameMoves.findMany({
       where: eq(gameMoves.gameId, gameId),
-      orderBy: [gameMoves.moveNumber, gameMoves.color],
+      orderBy: [asc(gameMoves.createdAt)],
     });
   },
 

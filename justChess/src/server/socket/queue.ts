@@ -22,7 +22,10 @@ export class AsyncQueue {
 
     // Chain new work after the previous tail, swallowing prior errors so a
     // single failure doesn't poison the queue for this key.
-    const next = previous.then(fn, fn);
+    // NOTE: use `() => fn()` as rejection handler — if `fn` were passed
+    // directly as the second argument, Promise would invoke it with the
+    // rejection reason as an argument, corrupting the call signature.
+    const next = previous.then(fn, () => fn());
 
     // Store the next tail (always-resolving variant) so future enqueues chain
     // off it without inheriting rejection state.

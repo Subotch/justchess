@@ -119,7 +119,13 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             estimatedWaitSeconds: position * 15,
           });
 
-// Periodically try to match (every 5 seconds)
+// Periodically try to match (every 5 seconds).
+          // Clear any previous interval before overwriting to prevent leaks
+          // when the player calls lobby:join_queue multiple times.
+          if (socket.data.matchInterval) {
+            clearInterval(socket.data.matchInterval);
+            socket.data.matchInterval = undefined;
+          }
           socket.data.matchInterval = setInterval(async () => {
             if (!socket.data.isInQueue) {
               clearInterval(socket.data.matchInterval);
