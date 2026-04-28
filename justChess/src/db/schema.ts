@@ -358,6 +358,9 @@ export const games = pgTable(
     // Spectator count peak
     peakSpectators: smallint("peak_spectators").notNull().default(0),
 
+    // Draw offer state
+    drawOfferedBy: varchar("draw_offered_by", { length: 5 }), // 'white' | 'black'
+
     // Timestamps
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),

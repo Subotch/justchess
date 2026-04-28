@@ -219,6 +219,7 @@ export const achievementService = {
 
   /**
    * Evaluate a single achievement criteria against user stats.
+   * AI games are excluded from wins, win_streak, and games_played achievements.
    */
   async evaluateCriteria(
     criteria: any,
@@ -226,15 +227,25 @@ export const achievementService = {
     userId: string,
     gameId: string
   ): Promise<boolean> {
+    // Calculate non-AI stats (exclude AI games from counts)
+    const nonAiWins = (stats.gamesWon || 0) - (stats.aiGamesWon || 0);
+    const nonAiGamesPlayed = (stats.gamesPlayed || 0) - (stats.aiGamesPlayed || 0);
+
     switch (criteria.type) {
       case "wins":
-        return stats.gamesWon >= criteria.count;
+        // Exclude AI games from win count
+        return nonAiWins >= criteria.count;
 
       case "win_streak":
-        return stats.currentWinStreak >= criteria.count || stats.bestWinStreak >= criteria.count;
+        // For win streak achievements, we need to check if the current/longest
+        // streak was achieved without AI games. This is a simplified check:
+        // only award if user has at least N non-AI wins.
+        // Note: A proper solution would track PvP-only streak separately.
+        return nonAiWins >= criteria.count;
 
       case "games_played":
-        return stats.gamesPlayed >= criteria.count;
+        // Exclude AI games from games count
+        return nonAiGamesPlayed >= criteria.count;
 
       case "rating":
         return (

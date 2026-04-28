@@ -50,10 +50,6 @@ export async function POST(req: NextRequest) {
     const userId = session.user.id;
 
     // Determine colors
-    let whitePlayerId: string;
-    let blackPlayerId: string | null;
-    let myColor: PieceColor;
-
     if (isAiGame) {
       const resolvedColor: PieceColor =
         playerColor === "random"
@@ -65,7 +61,7 @@ export async function POST(req: NextRequest) {
 
       // If human is white, they are whitePlayerId; if human is black, they are blackPlayerId
       const humanPlayerId = userId;
-      const aiPlayerId = null; // AI doesn't have a user ID
+      const aiPlayerId: string | null = null; // AI doesn't have a user ID
 
       const whitePlayerId = resolvedColor === "white" ? humanPlayerId : aiPlayerId;
       const blackPlayerId = resolvedColor === "black" ? humanPlayerId : aiPlayerId;

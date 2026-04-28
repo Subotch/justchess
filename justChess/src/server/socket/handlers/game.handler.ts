@@ -10,6 +10,7 @@ import { SOCKET_ROOMS } from "@/types/socket";
 import { gameService } from "@/services/game.service";
 import { clockManager } from "../clock-manager";
 import type { PieceColor } from "@/types/game";
+import { withRateLimit } from "../middleware/rate-limit.middleware";
 
 type AppSocket = Socket<any, any, any, SocketData>;
 
@@ -224,10 +225,19 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
           timeSpentMs: m.timeSpentMs,
         }));
         
-        // Determine current turn from last move or default to white
-        const currentTurn = existingMoves.length > 0 
-          ? (existingMoves[existingMoves.length - 1].fen.split(" ")[1] === "w" ? "white" : "black" as PieceColor)
-          : "white";
+// Determine current turn by replaying all moves
+        let currentTurn: PieceColor = "white";
+        if (existingMoves.length > 0) {
+          const chess = new Chess();
+          for (const move of existingMoves) {
+            chess.move({
+              from: move.uci.slice(0, 2),
+              to: move.uci.slice(2, 4),
+              promotion: move.uci[4] as "q" | "r" | "b" | "n" | undefined,
+            });
+          }
+          currentTurn = chess.turn() === "w" ? "white" : "black";
+        }
         
         // Get clock times
         const whiteTimeMs = activeClockState?.whiteTimeMs ?? (game.whiteTimeRemainingMs ?? game.timeControlMinutes * 60 * 1000);
@@ -287,7 +297,8 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
   });
 
   // ── game:move ────────────────────────────────────────────────────────
-  socket.on("game:move", async ({ gameId, from, to, promotion }: { gameId: string; from: string; to: string; promotion?: string }) => {
+  // Wrap handler with rate limiter: max 3 moves per second to prevent DoS
+  withRateLimit(socket, "game:move", async ({ gameId, from, to, promotion }: { gameId: string; from: string; to: string; promotion?: string }) => {
     try {
       const userId = socket.data.userId;
       const room = SOCKET_ROOMS.game(gameId);
@@ -317,9 +328,20 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         return;
       }
 
-      // Switch clock turn
-      clockManager.switchTurn(gameId);
+      // Switch clock turn with race condition guard
+      // The result.appliedIncrement tells us if increment was actually applied
+      const switchResult = clockManager.switchTurn(gameId, clockState?.activeColor);
+      if (!switchResult.appliedIncrement) {
+        console.warn(
+          `[game:move] Turn switch for game ${gameId} did not apply increment: ${switchResult.reason ?? 'unknown'}`
+        );
+        // No retry needed — if color mismatched, another move already processed
+      }
       const newClockState = clockManager.getGameState(gameId);
+
+      // Determine the color of the player who just moved (opposite of whose turn it is now)
+      const nextTurnColor: PieceColor = result.fen!.split(" ")[1] === "w" ? "white" : "black";
+      const movedColor: PieceColor = nextTurnColor === "white" ? "black" : "white";
 
       const movePayload = {
         gameId,
@@ -328,13 +350,13 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
           uci: result.uci!,
           fen: result.fen!,
           moveNumber: 0, // will be set by client
-          color: (from === to ? "white" : "white") as any, // determined by game state
+          color: movedColor,
           timeSpentMs: undefined,
           clockRemainingMs: timeRemaining,
         },
         fen: result.fen!,
         pgn: result.pgn!,
-        currentTurn: result.fen!.split(" ")[1] === "w" ? "white" : "black" as any,
+        currentTurn: nextTurnColor,
         whiteTimeRemainingMs: newClockState?.whiteTimeMs ?? 0,
         blackTimeRemainingMs: newClockState?.blackTimeMs ?? 0,
       };
@@ -365,9 +387,14 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
       }
 
       // Trigger AI move after a short delay to allow state to settle
+      // Only trigger if it's AI's turn (not the human player's turn)
       const updatedGame = await gameService.getGame(gameId);
       if (updatedGame?.isAiGame && updatedGame.status === "active") {
-        setTimeout(() => makeAiMove(io, gameId, room), 500);
+        const aiColor = (updatedGame.aiColor as PieceColor) ?? "black";
+        // Only call AI if the next turn is the AI's color
+        if (nextTurnColor === aiColor) {
+          setTimeout(() => makeAiMove(io, gameId, room), 500);
+        }
       }
     } catch (err) {
       console.error("[game:move]", err);
@@ -376,7 +403,8 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
   });
 
   // ── game:resign ──────────────────────────────────────────────────────
-  socket.on("game:resign", async ({ gameId }: { gameId: string }) => {
+  // Wrap handler with rate limiter: max 1 resign per 3 seconds
+  withRateLimit(socket, "game:resign", async ({ gameId }: { gameId: string }) => {
     try {
       const userId = socket.data.userId;
       const room = SOCKET_ROOMS.game(gameId);
@@ -409,17 +437,24 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
   });
 
   // ── game:offer_draw ──────────────────────────────────────────────────
-  socket.on("game:offer_draw", async ({ gameId }: { gameId: string }) => {
+  // Wrap handler with rate limiter: max 2 offers per 5 seconds
+  withRateLimit(socket, "game:offer_draw", async ({ gameId }: { gameId: string }) => {
     try {
-      const game = await gameService.getGame(gameId);
-      if (!game || game.status !== "active") return;
-
       const userId = socket.data.userId;
-      const color = game.whitePlayerId === userId ? "white" : "black";
-      const room = SOCKET_ROOMS.game(gameId);
+      if (!userId) {
+        socket.emit("error:generic", { code: "UNAUTHORIZED", message: "Not authenticated" });
+        return;
+      }
 
+      const result = await gameService.offerDraw(gameId, userId);
+      if (!result.success) {
+        socket.emit("error:generic", { code: "BAD_REQUEST", message: result.error ?? "Cannot offer draw" });
+        return;
+      }
+
+      const room = SOCKET_ROOMS.game(gameId);
       // Notify opponent
-      socket.to(room).emit("game:draw_offered", { gameId, byColor: color });
+      socket.to(room).emit("game:draw_offered", { gameId, byColor: result.color });
     } catch (err) {
       console.error("[game:offer_draw]", err);
     }
@@ -428,8 +463,14 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
   // ── game:accept_draw ─────────────────────────────────────────────────
   socket.on("game:accept_draw", async ({ gameId }: { gameId: string }) => {
     try {
+      const userId = socket.data.userId;
+      if (!userId) {
+        socket.emit("error:generic", { code: "UNAUTHORIZED", message: "Not authenticated" });
+        return;
+      }
+
       const room = SOCKET_ROOMS.game(gameId);
-      const result = await gameService.acceptDraw(gameId);
+      const result = await gameService.acceptDraw(gameId, userId);
 
       if (!result.success) {
         socket.emit("error:generic", { code: "BAD_REQUEST", message: result.error ?? "Cannot accept draw" });
@@ -470,8 +511,9 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
     }
   });
 
-  // ── game:chat_message ────────────────────────────────────────────────
-  socket.on("game:chat_message", async ({ gameId, message }: { gameId: string; message: string }) => {
+// ── game:chat_message ────────────────────────────────────────────────
+  // Wrap handler with rate limiter: max 2 messages per 2 seconds
+  withRateLimit(socket, "game:chat_message", async ({ gameId, message }: { gameId: string; message: string }) => {
     try {
       // Sanitize message
       const sanitized = message.trim().slice(0, 200);
@@ -550,12 +592,19 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
       promotion: (selectedMove.promotion as "q" | "r" | "b" | "n" | undefined) ?? undefined,
     });
 
-    if (!result.success) {
+if (!result.success) {
       console.error("[AI] Move failed", result.error);
       return;
     }
 
-    clockManager.switchTurn(gameId);
+    // Get clock state before switchTurn and use as race condition guard
+    const aiClockState = clockManager.getGameState(gameId);
+    const switched = clockManager.switchTurn(gameId, aiClockState?.activeColor);
+    if (!switched) {
+      console.warn(`[AI] Race condition detected for game ${gameId}, retrying switchTurn`);
+      const freshState = clockManager.getGameState(gameId);
+      clockManager.switchTurn(gameId, freshState?.activeColor);
+    }
     const newClockState = clockManager.getGameState(gameId);
 
     const movePayload = {
@@ -629,9 +678,7 @@ async function notifyAchievements(io: AppServer, gameId: string): Promise<void> 
       });
 
       const tenSecondsAgo = new Date(Date.now() - 10_000);
-      const newOnes = recent.filter(
-        (ua) => ua.earnedAt > tenSecondsAgo && ua.gameId === gameId
-      );
+      const newOnes = recent.filter((ua) => ua.earnedAt > tenSecondsAgo);
 
       for (const ua of newOnes) {
         const ach = (ua as any).achievement;

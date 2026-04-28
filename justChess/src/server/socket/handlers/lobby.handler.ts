@@ -119,12 +119,15 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             estimatedWaitSeconds: position * 15,
           });
 
-          // Periodically try to match (every 5 seconds)
-          const matchInterval = setInterval(async () => {
+// Periodically try to match (every 5 seconds)
+          socket.data.matchInterval = setInterval(async () => {
             if (!socket.data.isInQueue) {
-              clearInterval(matchInterval);
+              clearInterval(socket.data.matchInterval);
               return;
             }
+
+            // Keep player alive in queue
+            matchmakingQueue.heartbeat(userId);
 
             const updatedEntry = {
               ...entry,
@@ -133,7 +136,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
 
             const found = matchmakingQueue.findMatch(updatedEntry);
             if (found) {
-              clearInterval(matchInterval);
+              clearInterval(socket.data.matchInterval);
               matchmakingQueue.remove(userId);
               socket.data.isInQueue = false;
 
@@ -173,7 +176,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
 
           // Clean up interval on disconnect
           socket.once("disconnect", () => {
-            clearInterval(matchInterval);
+            clearInterval(socket.data.matchInterval);
             matchmakingQueue.remove(userId);
           });
         }
@@ -186,6 +189,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
 
   // ── lobby:leave_queue ────────────────────────────────────────────────
   socket.on("lobby:leave_queue", () => {
+    clearInterval(socket.data.matchInterval);
     matchmakingQueue.remove(socket.data.userId);
     socket.data.isInQueue = false;
     socket.leave("lobby");
@@ -282,6 +286,42 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         clearTimeout(challenge.timer);
         pendingChallenges.delete(challengeId);
 
+        // Get fresh ratings from DB for both players
+        const { db } = await import("@/db");
+        const { userStats } = await import("@/db/schema");
+        const { eq } = await import("drizzle-orm");
+        const { getTimingCategory } = await import("@/types/game");
+
+        const timingCategory = getTimingCategory(challenge.timeControlMinutes);
+
+        // Fetch fromUser rating
+        const fromStats = await db.query.userStats.findFirst({
+          where: eq(userStats.userId, challenge.fromUserId),
+        });
+        let fromRating = 1200;
+        if (fromStats) {
+          switch (timingCategory) {
+            case "bullet": fromRating = fromStats.ratingBullet; break;
+            case "blitz": fromRating = fromStats.ratingBlitz; break;
+            case "rapid": fromRating = fromStats.ratingRapid; break;
+            case "classical": fromRating = fromStats.ratingClassical; break;
+          }
+        }
+
+        // Fetch toUser rating
+        const toStats = await db.query.userStats.findFirst({
+          where: eq(userStats.userId, challenge.toUserId),
+        });
+        let toRating = 1200;
+        if (toStats) {
+          switch (timingCategory) {
+            case "bullet": toRating = toStats.ratingBullet; break;
+            case "blitz": toRating = toStats.ratingBlitz; break;
+            case "rapid": toRating = toStats.ratingRapid; break;
+            case "classical": toRating = toStats.ratingClassical; break;
+          }
+        }
+
         // Create game (challenger is white by default, or random)
         const isWhite = Math.random() < 0.5;
         const game = await gameService.createGame({
@@ -339,12 +379,12 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           timingCategory: startedGame.timingCategory as any,
           timeControlMinutes: startedGame.timeControlMinutes,
           incrementSeconds: startedGame.incrementSeconds,
-          white: {
+white: {
             id: isWhite ? challenge.fromUserId : challenge.toUserId,
             username: isWhite ? challenge.fromUsername : socket.data.username,
             name: isWhite ? challenge.fromUsername : socket.data.username,
             image: null,
-            rating: isWhite ? challenge.fromRating : 1200,
+            rating: isWhite ? fromRating : toRating,
             color: "white" as const,
             timeRemainingMs: timeMs,
             isConnected: true,
@@ -354,7 +394,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             username: isWhite ? socket.data.username : challenge.fromUsername,
             name: isWhite ? socket.data.username : challenge.fromUsername,
             image: null,
-            rating: isWhite ? 1200 : challenge.fromRating,
+            rating: isWhite ? toRating : fromRating,
             color: "black" as const,
             timeRemainingMs: timeMs,
             isConnected: true,

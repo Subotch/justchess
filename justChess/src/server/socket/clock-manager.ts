@@ -4,6 +4,16 @@
  */
 
 import type { PieceColor } from "@/types/game";
+import { AsyncQueue } from "./queue";
+
+interface QueueResult {
+    success: boolean;
+    appliedIncrement: boolean;
+    newActiveColor: PieceColor;
+    whiteTimeMs: number;
+    blackTimeMs: number;
+    reason?: string;
+}
 
 interface GameClockState {
   gameId: string;
@@ -31,6 +41,7 @@ class ClockManager {
   private clocks = new Map<string, GameClockState>();
   private tickCallbacks = new Map<string, ClockTickCallback>();
   private timeoutCallbacks = new Map<string, TimeoutCallback>();
+  private queues = new Map<string, AsyncQueue<QueueResult>>();
 
   /**
    * Start a clock for a game.
@@ -107,23 +118,85 @@ class ClockManager {
     }
   }
 
+/**
+   * Result of switchTurn operation.
+   */
+  interface SwitchTurnResult {
+    success: boolean;
+    appliedIncrement: boolean; // true if increment was actually applied
+    newActiveColor: PieceColor;
+    whiteTimeMs: number;
+    blackTimeMs: number;
+    reason?: string;
+  }
+
   /**
    * Switch the active clock after a move (and apply increment).
+   * This is an atomic operation — check and update happen together.
+   * 
+   * @param gameId - The game ID
+   * @param expectedActiveColor - Expected current active color (optional)
+   * @returns SwitchTurnResult with details about the operation
    */
-  switchTurn(gameId: string): void {
-    const state = this.clocks.get(gameId);
-    if (!state) return;
-
-    // Apply increment to the player who just moved
-    if (state.activeColor === "white") {
-      state.whiteTimeMs += state.incrementMs;
-      state.activeColor = "black";
-    } else {
-      state.blackTimeMs += state.incrementMs;
-      state.activeColor = "white";
+  async switchTurn(gameId: string, expectedActiveColor?: PieceColor): Promise<SwitchTurnResult> {
+    // Get or create queue for this game
+    let queue = this.queues.get(gameId);
+    if (!queue) {
+      queue = new AsyncQueue();
+      this.queues.set(gameId, queue);
     }
 
-    state.lastTickAt = Date.now();
+    // Execute operation in queue to ensure atomicity
+    return queue.execute(async () => {
+      const state = this.clocks.get(gameId);
+      if (!state) {
+        return {
+          success: false,
+          appliedIncrement: false,
+          newActiveColor: "white",
+          whiteTimeMs: 0,
+          blackTimeMs: 0,
+          reason: "Clock not found"
+        };
+      }
+
+      const currentColor = state.activeColor;
+
+      // If expected color was provided and doesn't match, don't apply increment
+      if (expectedActiveColor !== undefined && currentColor !== expectedActiveColor) {
+        console.warn(
+          `[ClockManager] Race condition detected in ${gameId}: ` +
+          `expected ${expectedActiveColor}, got ${currentColor}. Increment NOT applied.`
+        );
+        return {
+          success: true,
+          appliedIncrement: false,
+          newActiveColor: currentColor,
+          whiteTimeMs: state.whiteTimeMs,
+          blackTimeMs: state.blackTimeMs,
+          reason: `Color mismatch: expected ${expectedActiveColor}, got ${currentColor}`
+        };
+      }
+
+      // Apply increment to the player who just moved and switch turn
+      if (currentColor === "white") {
+        state.whiteTimeMs += state.incrementMs;
+        state.activeColor = "black";
+      } else {
+        state.blackTimeMs += state.incrementMs;
+        state.activeColor = "white";
+      }
+
+      state.lastTickAt = Date.now();
+
+      return {
+        success: true,
+        appliedIncrement: true,
+        newActiveColor: state.activeColor,
+        whiteTimeMs: state.whiteTimeMs,
+        blackTimeMs: state.blackTimeMs
+      };
+    });
   }
 
   /**
@@ -161,6 +234,9 @@ class ClockManager {
     for (const timer of state.reconnectTimers.values()) {
       clearTimeout(timer);
     }
+
+    // Clear queue for this game
+    this.queues.delete(gameId);
 
     this.clocks.delete(gameId);
     this.tickCallbacks.delete(gameId);

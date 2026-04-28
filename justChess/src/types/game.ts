@@ -207,6 +207,7 @@ export interface MatchmakingEntry {
   rating: number;
   request: MatchmakingRequest;
   joinedAt: number; // timestamp ms
+  lastHeartbeat?: number; // timestamp ms, for TTL
 }
 
 // ─────────────────────────────────────────────

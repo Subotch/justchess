@@ -181,7 +181,11 @@ export const gameService = {
 
     // Replay all moves to get current position
     for (const m of existingMoves) {
-      chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+      chess.move({
+        from: m.uci.slice(0, 2),
+        to: m.uci.slice(2, 4),
+        promotion: m.uci.length >= 5 ? (m.uci[4] as "q" | "r" | "b" | "n") : undefined,
+      });
     }
 
     // 4. Verify it's this player's turn
@@ -190,11 +194,17 @@ export const gameService = {
       return { success: false, error: "Not your turn" };
     }
 
-    // 5. Attempt the move (chess.js validates legality)
-    const moveResult = chess.move({ from, to, promotion });
-    if (!moveResult) {
+    // 5. Validate the move by checking available moves
+    const availableMoves = chess.moves({ verbose: true });
+    const isLegal = availableMoves.some(
+      (m) => m.from === from && m.to === to && (promotion ? m.promotion === promotion : true)
+    );
+    if (!isLegal) {
       return { success: false, error: "Illegal move" };
     }
+
+    // Apply the move only after validation
+    const moveResult = chess.move({ from, to, promotion });
 
     const san = moveResult.san;
     const uci = `${from}${to}${promotion || ""}`;
@@ -307,7 +317,11 @@ export const gameService = {
       orderBy: [gameMoves.moveNumber, gameMoves.color],
     });
     for (const m of existingMoves) {
-      chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+      chess.move({
+        from: m.uci.slice(0, 2),
+        to: m.uci.slice(2, 4),
+        promotion: m.uci.length >= 5 ? (m.uci[4] as "q" | "r" | "b" | "n") : undefined,
+      });
     }
 
     const finalResult = await this.finalizeGame(
@@ -331,11 +345,24 @@ export const gameService = {
   /**
    * Accept a draw offer — finalize as draw by agreement.
    */
-  async acceptDraw(gameId: string): Promise<MakeMoveResult> {
+  async acceptDraw(gameId: string, userId: string): Promise<MakeMoveResult> {
     const game = await db.query.games.findFirst({
       where: eq(games.id, gameId),
     });
     if (!game) return { success: false, error: "Game not found" };
+    if (game.status !== "active") return { success: false, error: "Game is not active" };
+
+    // Check if user is a participant
+    const isWhite = game.whitePlayerId === userId;
+    const isBlack = game.blackPlayerId === userId;
+    if (!isWhite && !isBlack) return { success: false, error: "Not a participant" };
+
+    // Check if there's an active draw offer (from the opponent)
+    const myColor: PieceColor = isWhite ? "white" : "black";
+    const opponentColor: PieceColor = isWhite ? "black" : "white";
+    if (game.drawOfferedBy !== opponentColor) {
+      return { success: false, error: "No draw offer from opponent" };
+    }
 
     const chess = new Chess();
     const existingMoves = await db.query.gameMoves.findMany({
@@ -343,8 +370,15 @@ export const gameService = {
       orderBy: [gameMoves.moveNumber, gameMoves.color],
     });
     for (const m of existingMoves) {
-      chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+      chess.move({
+        from: m.uci.slice(0, 2),
+        to: m.uci.slice(2, 4),
+        promotion: m.uci.length >= 5 ? (m.uci[4] as "q" | "r" | "b" | "n") : undefined,
+      });
     }
+
+    // Clear draw offer before finalizing
+    await db.update(games).set({ drawOfferedBy: null }).where(eq(games.id, gameId));
 
     const finalResult = await this.finalizeGame(
       gameId,
@@ -361,7 +395,35 @@ export const gameService = {
       resultReason: "agreement",
       whiteRatingChange: finalResult.whiteRatingChange,
       blackRatingChange: finalResult.blackRatingChange,
-    };
+};
+  },
+
+  /**
+   * Offer a draw to the opponent.
+   */
+  async offerDraw(gameId: string, userId: string): Promise<{ success: boolean; error?: string; color?: PieceColor }> {
+    const game = await db.query.games.findFirst({
+      where: eq(games.id, gameId),
+    });
+    if (!game) return { success: false, error: "Game not found" };
+    if (game.status !== "active") return { success: false, error: "Game is not active" };
+
+    // Check if user is a participant
+    const isWhite = game.whitePlayerId === userId;
+    const isBlack = game.blackPlayerId === userId;
+    if (!isWhite && !isBlack) return { success: false, error: "Not a participant" };
+
+    const color: PieceColor = isWhite ? "white" : "black";
+
+    // Check if there's already a draw offer from either side
+    if (game.drawOfferedBy) {
+      return { success: false, error: "Draw offer already active" };
+    }
+
+    // Set draw offer in DB
+    await db.update(games).set({ drawOfferedBy: color }).where(eq(games.id, gameId));
+
+    return { success: true, color };
   },
 
   /**
@@ -382,7 +444,11 @@ export const gameService = {
       orderBy: [gameMoves.moveNumber, gameMoves.color],
     });
     for (const m of existingMoves) {
-      chess.move({ from: m.uci.slice(0, 2), to: m.uci.slice(2, 4), promotion: m.uci[4] });
+      chess.move({
+        from: m.uci.slice(0, 2),
+        to: m.uci.slice(2, 4),
+        promotion: m.uci.length >= 5 ? (m.uci[4] as "q" | "r" | "b" | "n") : undefined,
+      });
     }
 
     await this.finalizeGame(gameId, result, "timeout", chess.pgn(), chess.fen());

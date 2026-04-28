@@ -333,6 +333,7 @@ export interface SocketData {
   currentGameId?: string;
   spectatingGameId?: string;
   isInQueue: boolean;
+  matchInterval?: NodeJS.Timeout;
 }
 
 // ─────────────────────────────────────────────

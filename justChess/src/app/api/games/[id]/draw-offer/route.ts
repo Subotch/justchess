@@ -30,13 +30,16 @@ export async function POST(
     const { action } = parsed.data;
 
     if (action === "accept") {
-      const result = await gameService.acceptDraw(id);
+      const result = await gameService.acceptDraw(id, session.user.id);
       if (!result.success) return Errors.badRequest(result.error ?? "Cannot accept draw");
       return ok({ gameEnded: true, result: "draw", resultReason: "agreement" });
     }
 
-    // For offer/decline, just acknowledge (Socket.IO handles real-time notification)
-    return ok({ action, gameId: id });
+    if (action === "offer") {
+      const result = await gameService.offerDraw(id, session.user.id);
+      if (!result.success) return Errors.badRequest(result.error ?? "Cannot offer draw");
+      return ok({ action, gameId: id });
+    }
   } catch (err) {
     console.error("[POST /api/games/[id]/draw-offer]", err);
     return Errors.internal();

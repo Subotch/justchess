@@ -8,17 +8,53 @@ import type { MatchmakingEntry } from "@/types/game";
 const RATING_RANGE_INITIAL = 100;   // ±100 initially
 const RATING_RANGE_EXPAND = 50;     // expand by 50 every 15s
 const RATING_RANGE_MAX = 500;       // max ±500
+const ENTRY_TTL_MS = 60 * 1000;      // 60 seconds — remove if no heartbeat
 
 class MatchmakingQueue {
   private queue: MatchmakingEntry[] = [];
+  private lastClean = Date.now();
 
   /**
+   * Clean expired entries (for players who disconnected).
+   * Called periodically or on each operation.
+   */
+  cleanExpired(): void {
+    const now = Date.now();
+    // Clean every 10 seconds max to avoid excessive filtering
+    if (now - this.lastClean < 10_000) return;
+
+    const before = this.queue.length;
+    this.queue = this.queue.filter(
+      (e) => now - (e.joinedAt ?? e.lastHeartbeat ?? now) < ENTRY_TTL_MS
+    );
+    this.lastClean = now;
+
+    if (this.queue.length < before) {
+      console.log(`[matchmaking] cleaned ${before - this.queue.length} expired entries`);
+    }
+  }
+
+  /**
+   * Update heartbeat — keep player alive in queue.
+   */
+  heartbeat(userId: string): void {
+    const entry = this.queue.find((e) => e.userId === userId);
+    if (entry) {
+      entry.lastHeartbeat = Date.now();
+    }
+  }
+
+/**
    * Add a player to the queue.
    */
   add(entry: MatchmakingEntry): void {
     // Remove any existing entry for this user
     this.remove(entry.userId);
+    // Set initial heartbeat timestamp
+    entry.lastHeartbeat = Date.now();
     this.queue.push(entry);
+    // Clean expired on add
+    this.cleanExpired();
   }
 
   /**
@@ -28,11 +64,14 @@ class MatchmakingQueue {
     this.queue = this.queue.filter((e) => e.userId !== userId);
   }
 
-  /**
+/**
    * Find a suitable match for the given entry.
    * Returns the matched entry and removes both from queue.
    */
   findMatch(entry: MatchmakingEntry): MatchmakingEntry | null {
+    // Clean expired before matching
+    this.cleanExpired();
+
     const { request, rating, joinedAt } = entry;
     const waitSeconds = (Date.now() - joinedAt) / 1000;
 
