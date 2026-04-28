@@ -1,64 +1,60 @@
 /**
- * Simple async queue for serializing operations on a per-game basis.
- * Prevents race conditions in clock operations.
+ * Simple async queue for serializing operations on a per-key basis.
+ * Prevents race conditions in async handlers that share mutable state
+ * (e.g. clock operations for the same gameId).
+ *
+ * Usage:
+ *   const q = new AsyncQueue();
+ *   const result = await q.enqueue("gameId", async () => { ... });
  */
 
-interface QueueItem<T> {
-  fn: () => Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason: Error) => void;
-}
-
 export class AsyncQueue {
-  private queues = new Map<string, Promise<void>>();
+  /** Tail of the per-key chain. New work is appended after this promise resolves. */
+  private tails = new Map<string, Promise<unknown>>();
 
   /**
-   * Enqueue a function to run sequentially for a given key.
+   * Enqueue an async function to run sequentially for the given key.
+   * Returns a promise that resolves with the function's result (or rejects
+   * with its error). Errors do NOT break the chain — subsequent items still run.
    */
   enqueue<T>(key: string, fn: () => Promise<T>): Promise<T> {
-    const existing = this.queues.get(key);
+    const previous = this.tails.get(key) ?? Promise.resolve();
 
-    const promise = new Promise<T>((resolve, reject) => {
-      const queueItem: QueueItem<T> = { fn, resolve, reject };
+    // Chain new work after the previous tail, swallowing prior errors so a
+    // single failure doesn't poison the queue for this key.
+    const next = previous.then(fn, fn);
 
-      const process = async () => {
-        try {
-          const result = await queueItem.fn();
-          resolve(result);
-        } catch (err) {
-          reject(err instanceof Error ? err : new Error(String(err)));
-        } finally {
-          // Remove this item and process next
-          this.queues.set(key, this.queues.get(key)?.then(() => undefined, () => undefined));
-        }
-      };
+    // Store the next tail (always-resolving variant) so future enqueues chain
+    // off it without inheriting rejection state.
+    const tail = next.then(
+      () => undefined,
+      () => undefined
+    );
+    this.tails.set(key, tail);
 
-      if (existing) {
-        // Append to existing queue
-        this.queues.set(
-          key,
-          existing.then(() => process(), () => process())
-        );
-      } else {
-        // Start new queue
-        this.queues.set(key, process().catch(() => undefined));
+    // Best-effort cleanup: if no new work was enqueued in the meantime,
+    // remove the entry so the map doesn't grow unbounded.
+    tail.then(() => {
+      if (this.tails.get(key) === tail) {
+        this.tails.delete(key);
       }
     });
 
-    return promise;
+    return next;
   }
 
   /**
-   * Clear queue for a specific key (e.g., when game ends).
+   * Drop the queue for a specific key (e.g., when a game ends).
+   * In-flight operations continue but new chained items will start fresh.
    */
   clear(key: string): void {
-    this.queues.delete(key);
+    this.tails.delete(key);
   }
 
   /**
-   * Clear all queues.
+   * Drop all queues.
    */
   clearAll(): void {
-    this.queues.clear();
+    this.tails.clear();
   }
 }

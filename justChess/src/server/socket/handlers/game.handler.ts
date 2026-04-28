@@ -328,14 +328,16 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         return;
       }
 
-      // Switch clock turn with race condition guard
-      // The result.appliedIncrement tells us if increment was actually applied
-      const switchResult = clockManager.switchTurn(gameId, clockState?.activeColor);
+      // Switch clock turn with race condition guard.
+      // switchTurn is serialized via per-game async queue inside ClockManager,
+      // so the check-and-mutate is atomic. appliedIncrement tells us whether
+      // the increment was actually applied (false ⇒ stale call, ignore).
+      const switchResult = await clockManager.switchTurn(gameId, clockState?.activeColor);
       if (!switchResult.appliedIncrement) {
         console.warn(
-          `[game:move] Turn switch for game ${gameId} did not apply increment: ${switchResult.reason ?? 'unknown'}`
+          `[game:move] Turn switch for game ${gameId} did not apply increment: ${switchResult.reason ?? "unknown"}`
         );
-        // No retry needed — if color mismatched, another move already processed
+        // No retry needed — if color mismatched, another move already processed.
       }
       const newClockState = clockManager.getGameState(gameId);
 
@@ -597,13 +599,14 @@ if (!result.success) {
       return;
     }
 
-    // Get clock state before switchTurn and use as race condition guard
+    // Get clock state before switchTurn and use as race condition guard.
+    // switchTurn is async and atomic via per-game queue.
     const aiClockState = clockManager.getGameState(gameId);
-    const switched = clockManager.switchTurn(gameId, aiClockState?.activeColor);
-    if (!switched) {
-      console.warn(`[AI] Race condition detected for game ${gameId}, retrying switchTurn`);
-      const freshState = clockManager.getGameState(gameId);
-      clockManager.switchTurn(gameId, freshState?.activeColor);
+    const switchResult = await clockManager.switchTurn(gameId, aiClockState?.activeColor);
+    if (!switchResult.appliedIncrement) {
+      console.warn(
+        `[AI] Turn switch for game ${gameId} did not apply increment: ${switchResult.reason ?? "unknown"}`
+      );
     }
     const newClockState = clockManager.getGameState(gameId);
 

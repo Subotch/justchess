@@ -1,18 +1,28 @@
 /**
  * Clock Manager — manages chess clocks for active games server-side.
  * Runs in the Node.js process alongside Socket.IO.
+ *
+ * Concurrency model:
+ *   Although Node.js is single-threaded, Socket.IO handlers are async and may
+ *   interleave at `await` points. To guarantee that "check current active color
+ *   → mutate state" happens atomically, all state-mutating operations on a
+ *   given game are serialized through a per-game async queue (see queue.ts).
  */
 
 import type { PieceColor } from "@/types/game";
 import { AsyncQueue } from "./queue";
 
-interface QueueResult {
-    success: boolean;
-    appliedIncrement: boolean;
-    newActiveColor: PieceColor;
-    whiteTimeMs: number;
-    blackTimeMs: number;
-    reason?: string;
+/**
+ * Result of a switchTurn() operation.
+ */
+export interface SwitchTurnResult {
+  success: boolean;
+  /** true if the increment was actually applied (i.e. no race condition guard tripped). */
+  appliedIncrement: boolean;
+  newActiveColor: PieceColor;
+  whiteTimeMs: number;
+  blackTimeMs: number;
+  reason?: string;
 }
 
 interface GameClockState {
@@ -41,7 +51,8 @@ class ClockManager {
   private clocks = new Map<string, GameClockState>();
   private tickCallbacks = new Map<string, ClockTickCallback>();
   private timeoutCallbacks = new Map<string, TimeoutCallback>();
-  private queues = new Map<string, AsyncQueue<QueueResult>>();
+  /** Single per-key async queue — all mutations for a given gameId are serialized. */
+  private queue = new AsyncQueue();
 
   /**
    * Start a clock for a game.
@@ -96,7 +107,6 @@ class ClockManager {
       state.blackTimeMs = Math.max(0, state.blackTimeMs - elapsed);
     }
 
-    // Emit tick every ~1 second (every 10 ticks)
     const onTick = this.tickCallbacks.get(gameId);
     if (onTick) {
       onTick({
@@ -118,36 +128,22 @@ class ClockManager {
     }
   }
 
-/**
-   * Result of switchTurn operation.
-   */
-  interface SwitchTurnResult {
-    success: boolean;
-    appliedIncrement: boolean; // true if increment was actually applied
-    newActiveColor: PieceColor;
-    whiteTimeMs: number;
-    blackTimeMs: number;
-    reason?: string;
-  }
-
   /**
    * Switch the active clock after a move (and apply increment).
-   * This is an atomic operation — check and update happen together.
-   * 
-   * @param gameId - The game ID
-   * @param expectedActiveColor - Expected current active color (optional)
-   * @returns SwitchTurnResult with details about the operation
+   *
+   * This is an atomic operation — check and update happen together, serialized
+   * through the per-game async queue. If `expectedActiveColor` is provided and
+   * does not match the current active color at the moment of execution, the
+   * increment is NOT applied and the result reports `appliedIncrement: false`.
+   *
+   * @param gameId               - The game ID
+   * @param expectedActiveColor  - Expected current active color (race-condition guard)
    */
-  async switchTurn(gameId: string, expectedActiveColor?: PieceColor): Promise<SwitchTurnResult> {
-    // Get or create queue for this game
-    let queue = this.queues.get(gameId);
-    if (!queue) {
-      queue = new AsyncQueue();
-      this.queues.set(gameId, queue);
-    }
-
-    // Execute operation in queue to ensure atomicity
-    return queue.execute(async () => {
+  switchTurn(
+    gameId: string,
+    expectedActiveColor?: PieceColor
+  ): Promise<SwitchTurnResult> {
+    return this.queue.enqueue<SwitchTurnResult>(gameId, async () => {
       const state = this.clocks.get(gameId);
       if (!state) {
         return {
@@ -156,17 +152,22 @@ class ClockManager {
           newActiveColor: "white",
           whiteTimeMs: 0,
           blackTimeMs: 0,
-          reason: "Clock not found"
+          reason: "Clock not found",
         };
       }
 
       const currentColor = state.activeColor;
 
-      // If expected color was provided and doesn't match, don't apply increment
-      if (expectedActiveColor !== undefined && currentColor !== expectedActiveColor) {
+      // Race-condition guard: if caller expected a different active color,
+      // it means another move was already processed between caller's read and
+      // this enqueued operation — bail out without applying increment.
+      if (
+        expectedActiveColor !== undefined &&
+        currentColor !== expectedActiveColor
+      ) {
         console.warn(
           `[ClockManager] Race condition detected in ${gameId}: ` +
-          `expected ${expectedActiveColor}, got ${currentColor}. Increment NOT applied.`
+            `expected ${expectedActiveColor}, got ${currentColor}. Increment NOT applied.`
         );
         return {
           success: true,
@@ -174,7 +175,7 @@ class ClockManager {
           newActiveColor: currentColor,
           whiteTimeMs: state.whiteTimeMs,
           blackTimeMs: state.blackTimeMs,
-          reason: `Color mismatch: expected ${expectedActiveColor}, got ${currentColor}`
+          reason: `Color mismatch: expected ${expectedActiveColor}, got ${currentColor}`,
         };
       }
 
@@ -194,7 +195,7 @@ class ClockManager {
         appliedIncrement: true,
         newActiveColor: state.activeColor,
         whiteTimeMs: state.whiteTimeMs,
-        blackTimeMs: state.blackTimeMs
+        blackTimeMs: state.blackTimeMs,
       };
     });
   }
@@ -236,7 +237,7 @@ class ClockManager {
     }
 
     // Clear queue for this game
-    this.queues.delete(gameId);
+    this.queue.clear(gameId);
 
     this.clocks.delete(gameId);
     this.tickCallbacks.delete(gameId);
