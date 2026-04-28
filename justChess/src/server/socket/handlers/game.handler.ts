@@ -47,6 +47,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
 
         if (participantSockets.length >= 2 || game.isAiGame) {
           const started = await gameService.startGame(gameId);
+          if (!started) return;
 
           // Start clock
           const timeMs = started.timeControlMinutes * 60 * 1000;
