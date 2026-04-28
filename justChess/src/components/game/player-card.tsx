@@ -5,15 +5,24 @@
  */
 
 import { useEffect, useState } from "react";
-import { formatTime, formatTimePrecise } from "@/lib/chess-engine";
-import type { GamePlayer } from "@/types/game";
+import { formatTime, formatTimePrecise, getCapturedPieces } from "@/lib/chess-engine";
+import type { GamePlayer, PieceColor } from "@/types/game";
+
+const PIECE_SYMBOLS: Record<string, Record<PieceColor, string>> = {
+  q: { white: "♛", black: "♕" },
+  r: { white: "♜", black: "♖" },
+  b: { white: "♝", black: "♗" },
+  n: { white: "♞", black: "♘" },
+  p: { white: "♟", black: "♙" },
+};
 
 interface PlayerCardProps {
   player: GamePlayer & { isActive: boolean };
   isTop: boolean;
+  fen?: string;
 }
 
-export function PlayerCard({ player, isTop }: PlayerCardProps) {
+export function PlayerCard({ player, isTop, fen }: PlayerCardProps) {
   const [displayMs, setDisplayMs] = useState(player.timeRemainingMs);
   const isLowTime = displayMs < 30_000;
   const isCritical = displayMs < 10_000;
@@ -35,6 +44,14 @@ export function PlayerCard({ player, isTop }: PlayerCardProps) {
       ? formatTimePrecise(displayMs)
       : formatTime(displayMs);
 
+  const captured = fen ? getCapturedPieces(fen, player.color) : {};
+  // opponent color for correct symbols (we captured opponent's pieces)
+  const opponentColor: PieceColor = player.color === "white" ? "black" : "white";
+  const capturedDisplay = (["q", "r", "b", "n", "p"] as const).flatMap((p) => {
+    const count = captured[p] ?? 0;
+    return Array(count).fill(PIECE_SYMBOLS[p][opponentColor]);
+  });
+
   return (
     <div
       className={`flex items-center justify-between px-4 py-2 rounded-lg ${
@@ -44,23 +61,30 @@ export function PlayerCard({ player, isTop }: PlayerCardProps) {
       }`}
     >
       {/* Player info */}
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-sm font-bold text-white overflow-hidden">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-8 h-8 flex-shrink-0 rounded-full bg-slate-600 flex items-center justify-center text-sm font-bold text-white overflow-hidden">
           {player.image ? (
             <img src={player.image} alt={player.username} className="w-full h-full object-cover" />
           ) : (
             player.username[0]?.toUpperCase()
           )}
         </div>
-        <div>
-          <p className="text-white font-semibold text-sm">{player.username}</p>
+        <div className="min-w-0">
+          <p className="text-white font-semibold text-sm truncate">{player.username}</p>
           <p className="text-slate-400 text-xs">{player.rating}</p>
         </div>
+        {capturedDisplay.length > 0 && (
+          <div className="flex flex-wrap gap-0 leading-none text-base ml-1 opacity-90" title="Captured pieces">
+            {capturedDisplay.map((sym, i) => (
+              <span key={i}>{sym}</span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Clock */}
       <div
-        className={`font-mono font-bold text-xl px-3 py-1 rounded ${
+        className={`flex-shrink-0 font-mono font-bold text-xl px-3 py-1 rounded ${
           isCritical
             ? "bg-red-600 text-white animate-pulse"
             : isLowTime

@@ -6,6 +6,34 @@
 import { Chess } from "chess.js";
 import type { PieceColor } from "@/types/game";
 
+const PIECE_START_COUNT: Record<string, number> = { p: 8, r: 2, n: 2, b: 2, q: 1 };
+
+/**
+ * Returns pieces captured BY the given color (i.e., opponent pieces missing from board).
+ * Result: { p: 2, r: 1, ... }
+ */
+export function getCapturedPieces(fen: string, byColor: PieceColor): Record<string, number> {
+  const fenBoard = fen.split(" ")[0];
+  const onBoard: Record<string, number> = { p: 0, r: 0, n: 0, b: 0, q: 0 };
+
+  for (const ch of fenBoard) {
+    if (ch === "/") continue;
+    const isUpper = ch >= "A" && ch <= "Z";
+    const lower = ch.toLowerCase();
+    if (!(lower in onBoard)) continue;
+    // white captures black pieces (lowercase); black captures white pieces (uppercase)
+    if (byColor === "white" && !isUpper) onBoard[lower]++;
+    if (byColor === "black" && isUpper) onBoard[lower]++;
+  }
+
+  const captured: Record<string, number> = {};
+  for (const piece of ["p", "r", "n", "b", "q"]) {
+    const diff = PIECE_START_COUNT[piece] - onBoard[piece];
+    if (diff > 0) captured[piece] = diff;
+  }
+  return captured;
+}
+
 /**
  * Get all legal moves from a square in the current position.
  * Returns target squares.

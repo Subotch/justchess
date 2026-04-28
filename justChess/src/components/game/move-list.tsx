@@ -14,12 +14,14 @@ interface MoveListProps {
 }
 
 export function MoveList({ moves, currentMoveIndex, onMoveClick }: MoveListProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to latest move
+  // Auto-scroll to latest move — scroll only inside the container
   useEffect(() => {
-    if (currentMoveIndex === undefined) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (currentMoveIndex === undefined && containerRef.current && bottomRef.current) {
+      const container = containerRef.current;
+      container.scrollTop = container.scrollHeight;
     }
   }, [moves.length, currentMoveIndex]);
 
@@ -42,7 +44,7 @@ export function MoveList({ moves, currentMoveIndex, onMoveClick }: MoveListProps
   }
 
   return (
-    <div className="bg-slate-800 rounded-xl p-3 max-h-80 overflow-y-auto">
+    <div ref={containerRef} className="bg-slate-800 rounded-xl p-3 max-h-80 overflow-y-auto">
       <div className="space-y-0.5">
         {movePairs.map((pair) => {
           const whiteIdx = (pair.number - 1) * 2;

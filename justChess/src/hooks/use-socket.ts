@@ -36,6 +36,12 @@ function getSocket(): AppSocket {
 export function useSocket() {
   const socketRef = useRef<AppSocket | null>(null);
   const { data: session } = useSession();
+  // Keep a ref so event handlers always see the latest session value
+  // even though the effect has an empty dependency array.
+  const sessionRef = useRef(session);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
   const {
     setGame,
     setMyColor,
@@ -58,6 +64,18 @@ export function useSocket() {
       socket.connect();
     }
 
+    // ── Reconnect: re-join active game room ──────────────────────────
+    // When Socket.IO reconnects it gets a new socket ID and loses all
+    // server-side room memberships. We must re-emit game:join so the
+    // server sends us the fresh game state.
+    const handleReconnect = () => {
+      const currentGameId = useGameStore.getState().game?.id;
+      if (currentGameId) {
+        socket.emit("game:join", { gameId: currentGameId });
+      }
+    };
+    socket.on("connect", handleReconnect);
+
     // ── Game events ──────────────────────────────────────────────────
     socket.on("game:started", ({ game }) => {
       const wasAlreadySet = !!useGameStore.getState().game;
@@ -65,20 +83,31 @@ export function useSocket() {
       // Determine my color based on game structure
       // For AI games: if aiColor is "black", human is white; if aiColor is "white", human is black
       // For human vs human: check white/black player IDs against current user
-      let myColor: PieceColor = "white";
       
+      const currentUserId = sessionRef.current?.user?.id;
+      const existingMyColor = useGameStore.getState().myColor;
+
+      let myColor: PieceColor;
+
       if (game.isAiGame) {
         myColor = (game.aiColor as PieceColor) === "black" ? "white" : "black";
-      } else if (session?.user?.id) {
+      } else if (currentUserId) {
         // For human vs human, compare player IDs with current session user
-        if (game.white.id === session.user.id) {
+        if (game.white.id === currentUserId) {
           myColor = "white";
-        } else if (game.black.id === session.user.id) {
+        } else if (game.black.id === currentUserId) {
           myColor = "black";
         } else {
-          // Spectator case - default to white (shouldn't happen for player)
-          myColor = "white";
+          // Spectator case — preserve existing if set, else default white
+          myColor = existingMyColor ?? "white";
         }
+      } else if (existingMyColor) {
+        // Session not yet loaded on reconnect — keep the previously determined color
+        // so isMyTurn is computed correctly from the fresh currentTurn
+        myColor = existingMyColor;
+      } else {
+        // Fallback: try to infer from game state (e.g. after hard page reload)
+        myColor = "white";
       }
       
       setMyColor(myColor);
@@ -178,6 +207,7 @@ export function useSocket() {
     });
 
     return () => {
+      socket.off("connect", handleReconnect);
       socket.off("game:started");
       socket.off("game:move_made");
       socket.off("game:clock_update");

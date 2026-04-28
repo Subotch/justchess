@@ -67,18 +67,18 @@ export default function GamePage({ params }: GamePageProps) {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 pt-24 sm:pt-6 pb-6">
         <div className="flex flex-col lg:flex-row gap-6 items-start justify-center">
           {/* Board column */}
           <div className="w-full max-w-[600px] flex flex-col gap-3">
             {/* Top player */}
-            <PlayerCard player={topPlayerState} isTop={true} />
+            <PlayerCard player={topPlayerState} isTop={true} fen={game.fen} />
 
             {/* Chess board */}
             <ChessBoard gameId={gameId} />
 
             {/* Bottom player */}
-            <PlayerCard player={bottomPlayerState} isTop={false} />
+            <PlayerCard player={bottomPlayerState} isTop={false} fen={game.fen} />
           </div>
 
           {/* Sidebar */}
