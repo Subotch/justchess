@@ -4,7 +4,7 @@
  * /play — Matchmaking lobby page
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSocket } from "@/hooks/use-socket";
 import { useLobbyStore } from "@/stores/lobby-store";
@@ -30,6 +30,32 @@ export default function PlayPage() {
   const { queue, leaveQueue: leaveQueueStore } = useLobbyStore();
   const [selectedControl, setSelectedControl] = useState(TIME_CONTROLS[6]);
   const [gameType, setGameType] = useState<"rated" | "casual">("rated");
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (queue.isInQueue && queue.joinedAt) {
+      setElapsed(Math.floor((Date.now() - queue.joinedAt) / 1000));
+      timerRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - (queue.joinedAt ?? Date.now())) / 1000));
+      }, 1000);
+    } else {
+      setElapsed(0);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [queue.isInQueue, queue.joinedAt]);
+
+  const formatElapsed = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
 
   const handleJoinQueue = () => {
     joinQueue(gameType, selectedControl.minutes, selectedControl.increment);
@@ -83,18 +109,26 @@ export default function PlayPage() {
         {/* Queue Status */}
         {queue.isInQueue ? (
           <div className="bg-slate-800 rounded-xl p-6 text-center">
-            <div className="text-2xl mb-2 animate-pulse" suppressHydrationWarning>🔍 {t('play.searching')}</div>
-            <p className="text-slate-400 mb-1" suppressHydrationWarning>
-              {t('play.searching')} {selectedControl.label}
-            </p>
-            <p className="text-slate-500 text-sm mb-4" suppressHydrationWarning>
-              {t('play.queuePosition', { position: queue.position })} · ~{queue.estimatedWaitSeconds}s
-            </p>
+            {/* Spinner */}
+            <div className="flex justify-center mb-4">
+              <span className="inline-block w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="text-xl font-semibold mb-1" suppressHydrationWarning>
+              {t('play.searching')}
+            </div>
+            <p className="text-slate-400 text-sm mb-1">{selectedControl.label}</p>
+            {/* Live timer */}
+            <p className="text-3xl font-mono font-bold text-green-400 mb-3">{formatElapsed(elapsed)}</p>
+            {queue.position > 0 && (
+              <p className="text-slate-500 text-sm mb-3" suppressHydrationWarning>
+                {t('play.queuePosition', { position: queue.position })}
+              </p>
+            )}
             <button
               onClick={handleLeaveQueue}
               className="px-6 py-2 bg-red-600 hover:bg-red-500 rounded-lg font-semibold transition-colors"
             >
-              <span suppressHydrationWarning>{t('common.cancel')}</span>
+              <span suppressHydrationWarning>{t('play.cancelSearch')}</span>
             </button>
           </div>
         ) : (
