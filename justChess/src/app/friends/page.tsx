@@ -9,6 +9,13 @@ import { notify } from "@/stores/notification-store";
 import { useTranslation } from "@/lib/i18n";
 import type { ApiResponse, FriendListItem, UserProfileResponse } from "@/types/api";
 
+function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text).then(
+    () => notify.success("Код скопирован", `Код ${text} скопирован в буфер обмена`),
+    () => notify.error("Ошибка", "Не удалось скопировать код")
+  );
+}
+
 export default function FriendsPage() {
   const { data: session, isPending } = useSession();
   const { t } = useTranslation();
@@ -465,12 +472,18 @@ function FriendsColumn({
               <div>
                 <Link
                   href={`/profile/${item.user.id}`}
-                  className="font-semibold text-slate-900 transition-colors hover:text-green-500 hover:underline dark:text-white dark:hover:text-green-400"
+                  className="font-semibold text-slate-900 transition-colors hover:text-green-500 dark:text-white dark:hover:text-green-400"
                 >
                   {item.user.name}
                 </Link>
                 <p className="text-sm text-slate-500 dark:text-slate-400">@{item.user.username ?? "unknown"}</p>
-                <p className="mt-1 text-xs tracking-[0.2em] text-green-600 dark:text-green-400">{item.user.friendCode}</p>
+                <button
+                  onClick={() => copyToClipboard(item.user.friendCode)}
+                  className="mt-1 cursor-pointer text-xs tracking-[0.2em] text-green-600 transition hover:text-green-400 dark:text-green-400 dark:hover:text-green-300"
+                  title="Нажмите, чтобы скопировать"
+                >
+                  {item.user.friendCode}
+                </button>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                   Rapid: {item.user.ratingRapid} · Blitz: {item.user.ratingBlitz}
                 </p>

@@ -257,14 +257,20 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
 
         pendingChallenges.set(challengeId, challenge);
 
-        // Notify the friend
-        io.to(`user:${friendId}`).emit("lobby:challenge_received", {
-          challengeId,
-          from: { id: userId, username, rating },
-          timeControlMinutes,
-          incrementSeconds,
-          expiresAt: new Date(expiresAt).toISOString(),
-        });
+        // Notify the friend - use try-catch to avoid errors if friend is offline
+        try {
+          io.to(`user:${friendId}`).emit("lobby:challenge_received", {
+            challengeId,
+            from: { id: userId, username, rating },
+            timeControlMinutes,
+            incrementSeconds,
+            expiresAt: new Date(expiresAt).toISOString(),
+          });
+        } catch (emitErr) {
+          console.error("[lobby:challenge_friend] Failed to notify friend:", emitErr);
+          socket.emit("error:generic", { code: "INTERNAL", message: "Failed to send challenge" });
+          return;
+        }
       } catch (err) {
         console.error("[lobby:challenge_friend]", err);
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to send challenge" });
@@ -338,16 +344,27 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           incrementSeconds: challenge.incrementSeconds,
         });
 
+        if (!game) {
+          throw new Error("Failed to create game");
+        }
+
         // Do NOT start the game here — let game:join handle it when both players
         // enter the room. This avoids duplicate game:started emissions and keeps
         // the clock off until participants are actually in the room.
 
         // Notify both players with just the gameId so they can navigate.
         socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
-        io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
-          challengeId,
-          gameId: game.id,
-        });
+        
+        // Notify challenger - use try-catch to avoid errors if user is offline
+        try {
+          io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
+            challengeId,
+            gameId: game.id,
+          });
+        } catch (emitErr) {
+          // Challenger may be offline - log but don't fail the accept
+          console.warn("[lobby:accept_challenge] Failed to notify challenger:", emitErr);
+        }
       } catch (err) {
         console.error("[lobby:accept_challenge]", err);
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to accept challenge" });
@@ -365,9 +382,14 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
       clearTimeout(challenge.timer);
       pendingChallenges.delete(challengeId);
 
-      io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_declined", {
-        challengeId,
-      });
+      // Notify challenger - use try-catch to avoid errors if user is offline
+      try {
+        io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_declined", {
+          challengeId,
+        });
+      } catch (emitErr) {
+        console.warn("[lobby:decline_challenge] Failed to notify challenger:", emitErr);
+      }
     }
   );
 }
