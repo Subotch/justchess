@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/db";
 import { users, userStats, friendships, games } from "@/db/schema";
-import { eq, or, and, desc } from "drizzle-orm";
+import { eq, or, and, desc, inArray, sql } from "drizzle-orm";
 import { ok, Errors } from "@/lib/api-response";
 import { withRateLimit, apiLimiter } from "@/lib/rate-limit";
 import { z } from "zod";
@@ -44,6 +44,37 @@ export async function GET(
 
     const stats = user.stats;
 
+    // Compute rated+casual aggregates (exclude AI and friendly).
+    let countedAggregate: {
+      gamesPlayed: number;
+      gamesWon: number;
+      gamesLost: number;
+      gamesDrawn: number;
+    } | null = null;
+    if (stats) {
+      const [counted] = await db
+        .select({
+          gamesPlayed: sql<number>`count(*)::int`,
+          gamesWon: sql<number>`count(*) filter (where (${games.whitePlayerId} = ${id} and ${games.result} = 'white_wins') or (${games.blackPlayerId} = ${id} and ${games.result} = 'black_wins'))::int`,
+          gamesLost: sql<number>`count(*) filter (where (${games.whitePlayerId} = ${id} and ${games.result} = 'black_wins') or (${games.blackPlayerId} = ${id} and ${games.result} = 'white_wins'))::int`,
+          gamesDrawn: sql<number>`count(*) filter (where ${games.result} = 'draw')::int`,
+        })
+        .from(games)
+        .where(
+          and(
+            or(eq(games.whitePlayerId, id), eq(games.blackPlayerId, id)),
+            eq(games.status, "completed"),
+            inArray(games.gameType, ["rated", "casual"])
+          )
+        );
+      countedAggregate = {
+        gamesPlayed: counted?.gamesPlayed ?? 0,
+        gamesWon: counted?.gamesWon ?? 0,
+        gamesLost: counted?.gamesLost ?? 0,
+        gamesDrawn: counted?.gamesDrawn ?? 0,
+      };
+    }
+
     // Get recent games (last 5)
     const recentGames = await db.query.games.findMany({
       where: and(
@@ -75,6 +106,26 @@ export async function GET(
       }
     }
 
+    // Compute total play time in minutes from all completed games
+    const [playTimeRow] = await db
+      .select({
+        totalMinutes: sql<number>`
+          coalesce(
+            sum(
+              extract(epoch from (${games.endedAt} - ${games.startedAt})) / 60
+            )::int,
+            0
+          )`,
+      })
+      .from(games)
+      .where(
+        and(
+          or(eq(games.whitePlayerId, id), eq(games.blackPlayerId, id)),
+          eq(games.status, "completed")
+        )
+      );
+    const totalPlayTimeMinutes = playTimeRow?.totalMinutes ?? 0;
+
     return ok({
       id: user.id,
       username: user.username,
@@ -86,20 +137,22 @@ export async function GET(
       isOnline: user.isOnline,
       lastSeenAt: user.lastSeenAt?.toISOString() ?? null,
       createdAt: user.createdAt.toISOString(),
-      stats: stats
-        ? {
-            ratingRapid: stats.ratingRapid,
-            ratingBlitz: stats.ratingBlitz,
-            ratingBullet: stats.ratingBullet,
-            ratingClassical: stats.ratingClassical,
-            gamesPlayed: stats.gamesPlayed,
-            gamesWon: stats.gamesWon,
-            gamesLost: stats.gamesLost,
-            gamesDrawn: stats.gamesDrawn,
-            currentWinStreak: stats.currentWinStreak,
-            bestWinStreak: stats.bestWinStreak,
-          }
-        : null,
+      stats:
+        stats && countedAggregate
+          ? {
+              ratingRapid: stats.ratingRapid,
+              ratingBlitz: stats.ratingBlitz,
+              ratingBullet: stats.ratingBullet,
+              ratingClassical: stats.ratingClassical,
+              gamesPlayed: countedAggregate.gamesPlayed,
+              gamesWon: countedAggregate.gamesWon,
+              gamesLost: countedAggregate.gamesLost,
+              gamesDrawn: countedAggregate.gamesDrawn,
+              currentWinStreak: stats.currentWinStreak,
+              bestWinStreak: stats.bestWinStreak,
+              totalPlayTimeMinutes,
+            }
+          : null,
       recentGames: recentGames.map((g) => {
         const isWhite = g.whitePlayerId === id;
         const opponent = isWhite ? g.blackPlayer : g.whitePlayer;

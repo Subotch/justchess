@@ -112,7 +112,8 @@ export interface UserProfileResponse {
     gamesDrawn: number;
     currentWinStreak: number;
     bestWinStreak: number;
-  };
+    totalPlayTimeMinutes: number;
+  } | null;
   recentGames: GameHistoryItem[];
   isFriend?: boolean;
   friendshipStatus?: "pending" | "accepted" | "rejected" | "blocked" | null;

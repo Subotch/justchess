@@ -6,6 +6,7 @@ import { NotificationContainer } from "@/components/ui/notification-container";
 import { UserMenu } from "@/components/ui/user-menu";
 import { HomeButton } from "@/components/ui/home-button";
 import { SettingsPanel } from "@/components/ui/settings-panel";
+import { AuthLoadingOverlay } from "@/components/ui/auth-loading-overlay";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -35,6 +36,7 @@ export default function RootLayout({
             <SettingsPanel />
           </div>
           <UserMenu />
+          <AuthLoadingOverlay />
           {children}
           <NotificationContainer />
         </Providers>

@@ -569,13 +569,21 @@ export const gameService = {
       await updateUserGameStats(game.blackPlayerId, result, "black", game.isAiGame);
     }
 
-    // Check achievements
-    if (game.whitePlayerId) {
-      await achievementService.checkAndAward(game.whitePlayerId, gameId);
-    }
-    if (game.blackPlayerId) {
-      await achievementService.checkAndAward(game.blackPlayerId, gameId);
-    }
+    // Check achievements asynchronously — fire-and-forget so it doesn't block the game response
+    setImmediate(() => {
+      const whiteId = game.whitePlayerId;
+      const blackId = game.blackPlayerId;
+      if (whiteId) {
+        achievementService.checkAndAward(whiteId, gameId).catch((err) =>
+          console.error("[achievements] white", whiteId, err)
+        );
+      }
+      if (blackId) {
+        achievementService.checkAndAward(blackId, gameId).catch((err) =>
+          console.error("[achievements] black", blackId, err)
+        );
+      }
+    });
 
     return { whiteRatingChange, blackRatingChange, whiteRatingAfter, blackRatingAfter };
   },

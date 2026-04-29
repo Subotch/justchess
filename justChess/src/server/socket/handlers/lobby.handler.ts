@@ -333,7 +333,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         const game = await gameService.createGame({
           whitePlayerId: isWhite ? challenge.fromUserId : challenge.toUserId,
           blackPlayerId: isWhite ? challenge.toUserId : challenge.fromUserId,
-          gameType: "casual",
+          gameType: "friendly",
           timeControlMinutes: challenge.timeControlMinutes,
           incrementSeconds: challenge.incrementSeconds,
         });

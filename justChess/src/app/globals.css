@@ -24,3 +24,73 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ─── Auth Loading Overlay ─────────────────────────────────────── */
+
+.auth-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.auth-loading-spinner {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+/*
+ * Каждый шарик расположен на окружности (radius ≈ 24px).
+ * Базовый угол вычислен через CSS: dot 0 = 0°, 1 = 72°, 2 = 144°, 3 = 216°, 4 = 288°.
+ * Анимация: шарик летит к центру (translateX → 0) и возвращается обратно,
+ * запуск сдвинут по времени для волнового эффекта.
+ */
+
+.auth-loading-dot {
+  --radius: 24px;
+  --angle: calc(var(--dot-index) * 72deg);
+
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80aa;
+
+  transform: rotate(var(--angle)) translateX(var(--radius));
+  animation: auth-dot-gather 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation-delay: calc(var(--dot-index) * -0.28s);
+}
+
+@keyframes auth-dot-gather {
+  0% {
+    transform: rotate(var(--angle)) translateX(var(--radius));
+    opacity: 1;
+  }
+  40% {
+    transform: rotate(var(--angle)) translateX(4px);
+    opacity: 0.9;
+  }
+  50% {
+    transform: rotate(var(--angle)) translateX(0px);
+    opacity: 0.5;
+    background: #86efac;
+  }
+  60% {
+    transform: rotate(var(--angle)) translateX(4px);
+    opacity: 0.9;
+  }
+  100% {
+    transform: rotate(var(--angle)) translateX(var(--radius));
+    opacity: 1;
+  }
+}

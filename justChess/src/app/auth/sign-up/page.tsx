@@ -20,7 +20,7 @@ interface AvailabilityCheck {
 export default function SignUpPage() {
   const router = useRouter();
   const { t } = useTranslation();
-  const [form, setForm] = useState({ name: "", username: "", email: "", password: "" });
+  const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [availability, setAvailability] = useState<AvailabilityCheck>({
     usernameAvailable: true,
     emailAvailable: true,
@@ -112,8 +112,9 @@ export default function SignUpPage() {
       const result = await signUp.email({
         email: form.email,
         password: form.password,
-        name: form.name,
-      });
+        name: form.username,
+        username: form.username,
+      } as Parameters<typeof signUp.email>[0]);
 
       if (result.error) {
         setError(result.error.message ?? t('auth.signUpError'));
@@ -248,21 +249,6 @@ export default function SignUpPage() {
                   {availability.emailError}
                 </p>
               )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1" suppressHydrationWarning>
-                {t('auth.email')}
-              </label>
-              <input
-                type="email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-green-500 transition-colors"
-                placeholder="you@example.com"
-              />
             </div>
 
             <div>

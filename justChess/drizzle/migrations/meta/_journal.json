@@ -15,6 +15,13 @@
       "when": 1777390169925,
       "tag": "0001_glossy_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0002_friendly_game_type",
+      "breakpoints": false
     }
   ]
 }

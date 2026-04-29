@@ -6,7 +6,7 @@
 // ENUMS / LITERALS
 // ─────────────────────────────────────────────
 
-export type GameType = "rated" | "casual" | "ai" | "tournament";
+export type GameType = "rated" | "casual" | "ai" | "tournament" | "friendly";
 
 export type GameResult =
   | "white_wins"

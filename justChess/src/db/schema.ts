@@ -36,6 +36,7 @@ export const gameTypeEnum = pgEnum("game_type", [
   "casual",
   "ai",
   "tournament",
+  "friendly",
 ]);
 
 export const gameResultEnum = pgEnum("game_result", [

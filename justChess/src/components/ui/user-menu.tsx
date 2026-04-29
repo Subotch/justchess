@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -12,6 +12,18 @@ export function UserMenu() {
   const { data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open]);
 
   if (!session?.user) {
     return null;
@@ -37,7 +49,7 @@ export function UserMenu() {
   };
 
   return (
-    <div className="fixed top-4 right-4 z-50">
+    <div className="fixed top-4 right-4 z-50" ref={containerRef}>
       <div className="relative">
         <button
           type="button"
@@ -71,6 +83,13 @@ export function UserMenu() {
             </div>
 
             <div className="mb-3 flex flex-col gap-2">
+              <Link
+                href={`/profile/${session.user.id}`}
+                onClick={() => setOpen(false)}
+                className="w-full rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600"
+              >
+                <span suppressHydrationWarning>{t('nav.profile')}</span>
+              </Link>
               <Link
                 href="/friends"
                 onClick={() => setOpen(false)}

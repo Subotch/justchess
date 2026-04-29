@@ -463,7 +463,12 @@ function FriendsColumn({
           <div key={item.friendshipId} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-700/50">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-semibold text-slate-900 dark:text-white">{item.user.name}</p>
+                <Link
+                  href={`/profile/${item.user.id}`}
+                  className="font-semibold text-slate-900 transition-colors hover:text-green-500 hover:underline dark:text-white dark:hover:text-green-400"
+                >
+                  {item.user.name}
+                </Link>
                 <p className="text-sm text-slate-500 dark:text-slate-400">@{item.user.username ?? "unknown"}</p>
                 <p className="mt-1 text-xs tracking-[0.2em] text-green-600 dark:text-green-400">{item.user.friendCode}</p>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">

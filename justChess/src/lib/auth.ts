@@ -132,6 +132,22 @@ export const auth = betterAuth({
     "http://localhost:3000",
   ],
 
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          const friendCode = await createUniqueFriendCode();
+          return {
+            data: {
+              ...user,
+              friendCode,
+            },
+          };
+        },
+      },
+    },
+  },
+
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
       if (!ctx.path.startsWith("/sign-up")) {
@@ -146,20 +162,6 @@ export const auth = betterAuth({
       const existingStats = await db.query.userStats.findFirst({
         where: eq(schema.userStats.userId, newUser.id),
       });
-
-      const existingUser = await db.query.users.findFirst({
-        where: eq(schema.users.id, newUser.id),
-      });
-
-      if (existingUser && !existingUser.friendCode) {
-        await db
-          .update(schema.users)
-          .set({
-            friendCode: await createUniqueFriendCode(),
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.users.id, newUser.id));
-      }
 
       if (existingStats) {
         return;
