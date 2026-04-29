@@ -9,6 +9,7 @@ import { matchmakingQueue } from "../matchmaking";
 import { gameService } from "@/services/game.service";
 import { clockManager } from "../clock-manager";
 import { SOCKET_ROOMS } from "@/types/socket";
+import { db } from "@/db";
 
 type AppSocket = Socket<any, any, any, SocketData>;
 
@@ -359,11 +360,25 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         // Create game (challenger is white by default, or random)
         const isWhite = Math.random() < 0.5;
         console.log("[lobby:accept_challenge] Creating game - isWhite:", isWhite);
-        
+
+        // Determine if 'friendly' enum value is available in DB; fall back to 'casual'
+        let resolvedGameType: "friendly" | "casual" = "friendly";
+        try {
+          const { sql: sqlRaw } = await import("drizzle-orm");
+          const result = await db.execute(sqlRaw`SELECT enumlabel FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'game_type' AND e.enumlabel = 'friendly'`);
+          if (!result.rows || result.rows.length === 0) {
+            console.warn("[lobby:accept_challenge] 'friendly' enum not in DB, falling back to 'casual'. Run: npm run db:migrate");
+            resolvedGameType = "casual";
+          }
+        } catch (enumCheckErr) {
+          console.warn("[lobby:accept_challenge] Could not check enum, using 'casual' fallback:", enumCheckErr);
+          resolvedGameType = "casual";
+        }
+
         const game = await gameService.createGame({
           whitePlayerId: isWhite ? challenge.fromUserId : challenge.toUserId,
           blackPlayerId: isWhite ? challenge.toUserId : challenge.fromUserId,
-          gameType: "friendly",
+          gameType: resolvedGameType,
           timeControlMinutes: challenge.timeControlMinutes,
           incrementSeconds: challenge.incrementSeconds,
         });
