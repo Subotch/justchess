@@ -19,7 +19,7 @@ function copyToClipboard(text: string) {
 export default function FriendsPage() {
   const { data: session, isPending } = useSession();
   const { t } = useTranslation();
-  const { socket, challengeFriend, acceptChallenge, declineChallenge } = useSocket();
+  const { socket, socketConnected, challengeFriend, acceptChallenge, declineChallenge } = useSocket();
   const pendingChallenge = useLobbyStore((state: any) => state.pendingChallenge);
   const clearPendingChallenge = useLobbyStore((state: any) => state.clearPendingChallenge);
 
@@ -185,16 +185,26 @@ export default function FriendsPage() {
   };
 
   const handleAcceptChallenge = () => {
-    if (pendingChallenge && socket) {
+    console.log("[friends] handleAcceptChallenge called");
+    console.log("[friends] pendingChallenge:", pendingChallenge);
+    console.log("[friends] socketConnected:", socketConnected);
+    if (pendingChallenge && socketConnected) {
+      console.log("[friends] Calling acceptChallenge with:", pendingChallenge.challengeId);
       acceptChallenge(pendingChallenge.challengeId);
       clearPendingChallenge();
+    } else {
+      console.error("[friends] handleAcceptChallenge FAILED: pendingChallenge=", !!pendingChallenge, "socketConnected=", socketConnected);
     }
   };
 
   const handleDeclineChallenge = () => {
-    if (pendingChallenge && socket) {
+    console.log("[friends] handleDeclineChallenge called");
+    if (pendingChallenge && socketConnected) {
+      console.log("[friends] Calling declineChallenge with:", pendingChallenge.challengeId);
       declineChallenge(pendingChallenge.challengeId);
       clearPendingChallenge();
+    } else {
+      console.error("[friends] handleDeclineChallenge FAILED: pendingChallenge=", !!pendingChallenge, "socketConnected=", socketConnected);
     }
   };
 

@@ -292,7 +292,11 @@ export function useSocket() {
   );
 
   const acceptChallenge = useCallback((challengeId: string) => {
+    console.log("[useSocket] acceptChallenge called with:", challengeId);
+    console.log("[useSocket] socketRef.current:", socketRef.current);
+    console.log("[useSocket] socket connected:", socketRef.current?.connected);
     socketRef.current?.emit("lobby:accept_challenge", { challengeId });
+    console.log("[useSocket] acceptChallenge emit completed");
   }, []);
 
   const declineChallenge = useCallback((challengeId: string) => {
@@ -309,6 +313,7 @@ export function useSocket() {
 
   return {
     socket: socketRef.current,
+    socketConnected: socketRef.current?.connected,
     joinGame,
     makeMove,
     resign,

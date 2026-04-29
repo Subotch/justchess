@@ -28,6 +28,7 @@ interface Challenge {
 const pendingChallenges = new Map<string, Challenge>();
 
 export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
+  console.log("[lobby:handlers] Registered for socket:", socket.id);
   // ── lobby:join_queue ─────────────────────────────────────────────────
   socket.on(
     "lobby:join_queue",
@@ -279,9 +280,12 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
   );
 
   // ── lobby:accept_challenge ───────────────────────────────────────────
+  console.log("[lobby:handlers] Registering lobby:accept_challenge handler");
   socket.on(
     "lobby:accept_challenge",
     async ({ challengeId }: { challengeId: string }) => {
+      console.log("[lobby:accept_challenge] EVENT FIRED! challengeId:", challengeId);
+      console.log("[lobby:accept_challenge] io object:", typeof io, io !== undefined);
       try {
         console.log("[lobby:accept_challenge] Received challengeId:", challengeId);
         console.log("[lobby:accept_challenge] Current user:", socket.data.userId);
@@ -377,11 +381,23 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
         
         // Notify challenger via their user room
-        console.log("[lobby:accept_challenge] Sending challenge_accepted to challenger:", challenge.fromUserId);
-        io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
-          challengeId,
-          gameId: game.id,
-        });
+        console.log("[lobby:accept_challenge] About to notify challenger:", challenge.fromUserId);
+        console.log("[lobby:accept_challenge] io type:", typeof io);
+        console.log("[lobby:accept_challenge] io.to type:", typeof io.to);
+        
+        const challengerRoom = `user:${challenge.fromUserId}`;
+        console.log("[lobby:accept_challenge] Challenger room:", challengerRoom);
+        
+        try {
+          io.to(challengerRoom).emit("lobby:challenge_accepted", {
+            challengeId,
+            gameId: game.id,
+          });
+          console.log("[lobby:accept_challenge] Successfully notified challenger");
+        } catch (emitErr) {
+          console.error("[lobby:accept_challenge] ERROR notifying challenger:", emitErr);
+          // Don't fail the accept - challenger may be offline
+        }
         
         console.log("[lobby:accept_challenge] SUCCESS - Game ID:", game.id);
       } catch (err) {
