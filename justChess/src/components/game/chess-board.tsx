@@ -4,7 +4,7 @@
  * ChessBoard component — wraps react-chessboard with game logic
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useRef } from "react";
 import { Chessboard } from "react-chessboard";
 import { useGameStore } from "@/stores/game-store";
 import { useUserStore } from "@/stores/user-store";
@@ -24,6 +24,8 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
   const { makeMove } = useSocket();
   const [promotionSquare, setPromotionSquare] = useState<string | null>(null);
   const [promotionMove, setPromotionMove] = useState<{ from: string; to: string } | null>(null);
+  // Guard against duplicate move submissions from mobile touch events
+  const isSubmittingMove = useRef(false);
 
   const fen = fenOverride ?? game?.fen ?? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
   const isFlipped = myColor === "black";
@@ -127,6 +129,11 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
   );
 
   const executeMove = (from: string, to: string, promotion?: "q" | "r" | "b" | "n") => {
+    // Prevent duplicate submissions from mobile touch events firing multiple times
+    if (isSubmittingMove.current) return;
+    isSubmittingMove.current = true;
+    setTimeout(() => { isSubmittingMove.current = false; }, 600);
+
     if (onMove) {
       onMove(from, to, promotion);
     } else {
