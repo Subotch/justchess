@@ -25,7 +25,7 @@ class MatchmakingQueue {
 
     const before = this.queue.length;
     this.queue = this.queue.filter(
-      (e) => now - (e.joinedAt ?? e.lastHeartbeat ?? now) < ENTRY_TTL_MS
+      (e) => now - (e.lastHeartbeat ?? e.joinedAt ?? now) < ENTRY_TTL_MS
     );
     this.lastClean = now;
 

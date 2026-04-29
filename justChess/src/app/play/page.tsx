@@ -27,7 +27,7 @@ export default function PlayPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const { joinQueue, leaveQueue } = useSocket();
-  const { queue, leaveQueue: leaveQueueStore } = useLobbyStore();
+  const { queue, joinQueue: joinQueueStore, leaveQueue: leaveQueueStore } = useLobbyStore();
   const [selectedControl, setSelectedControl] = useState(TIME_CONTROLS[6]);
   const [gameType, setGameType] = useState<"rated" | "casual">("rated");
   const [elapsed, setElapsed] = useState(0);
@@ -58,6 +58,7 @@ export default function PlayPage() {
   };
 
   const handleJoinQueue = () => {
+    joinQueueStore(gameType, selectedControl.minutes, selectedControl.increment);
     joinQueue(gameType, selectedControl.minutes, selectedControl.increment);
   };
 

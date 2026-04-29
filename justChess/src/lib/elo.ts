@@ -18,9 +18,15 @@ export function getKFactor(rating: number, gamesPlayed: number): number {
 /**
  * Expected score for player A against player B.
  * Returns a value between 0 and 1.
+ *
+ * Rule of 400: if the rating difference exceeds 400 points,
+ * it is capped at 400 to protect strong players from large
+ * unexpected losses and limit the expected score spread.
  */
 export function expectedScore(ratingA: number, ratingB: number): number {
-  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+  const MAX_DIFF = 400;
+  const diff = Math.max(-MAX_DIFF, Math.min(MAX_DIFF, ratingA - ratingB));
+  return 1 / (1 + Math.pow(10, -diff / 400));
 }
 
 /**

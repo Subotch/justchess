@@ -1,6 +1,7 @@
 import { defineConfig } from "eslint/config";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
+import nextPlugin from "@next/eslint-plugin-next";
 
 const eslintConfig = defineConfig([
   {
@@ -15,8 +16,10 @@ const eslintConfig = defineConfig([
     },
     plugins: {
       "@typescript-eslint": tsPlugin,
+      "@next/next": nextPlugin,
     },
     rules: {
+      ...nextPlugin.configs.recommended.rules,
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": ["warn", { 
         argsIgnorePattern: "^_",
