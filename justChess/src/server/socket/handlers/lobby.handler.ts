@@ -283,13 +283,27 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
     "lobby:accept_challenge",
     async ({ challengeId }: { challengeId: string }) => {
       try {
+        console.log("[lobby:accept_challenge] Received challengeId:", challengeId);
+        console.log("[lobby:accept_challenge] Current user:", socket.data.userId);
+        
         const challenge = pendingChallenges.get(challengeId);
+        console.log("[lobby:accept_challenge] Challenge found:", !!challenge);
+        
         if (!challenge) {
+          console.error("[lobby:accept_challenge] Challenge not found or expired");
           socket.emit("error:generic", { code: "NOT_FOUND", message: "Challenge not found or expired" });
           return;
         }
 
+        console.log("[lobby:accept_challenge] Challenge details:", {
+          fromUserId: challenge.fromUserId,
+          toUserId: challenge.toUserId,
+          timeControlMinutes: challenge.timeControlMinutes,
+          incrementSeconds: challenge.incrementSeconds,
+        });
+
         if (challenge.toUserId !== socket.data.userId) {
+          console.error("[lobby:accept_challenge] Not your challenge");
           socket.emit("error:generic", { code: "FORBIDDEN", message: "Not your challenge" });
           return;
         }
@@ -297,6 +311,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         // Clear expiry timer
         clearTimeout(challenge.timer);
         pendingChallenges.delete(challengeId);
+        console.log("[lobby:accept_challenge] Challenge removed from pending");
 
         // Get fresh ratings from DB for both players
         const { db } = await import("@/db");
@@ -305,6 +320,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         const { getTimingCategory } = await import("@/types/game");
 
         const timingCategory = getTimingCategory(challenge.timeControlMinutes);
+        console.log("[lobby:accept_challenge] Timing category:", timingCategory);
 
         // Fetch fromUser rating
         const fromStats = await db.query.userStats.findFirst({
@@ -319,6 +335,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             case "classical": fromRating = fromStats.ratingClassical; break;
           }
         }
+        console.log("[lobby:accept_challenge] From rating:", fromRating);
 
         // Fetch toUser rating
         const toStats = await db.query.userStats.findFirst({
@@ -333,9 +350,12 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             case "classical": toRating = toStats.ratingClassical; break;
           }
         }
+        console.log("[lobby:accept_challenge] To rating:", toRating);
 
         // Create game (challenger is white by default, or random)
         const isWhite = Math.random() < 0.5;
+        console.log("[lobby:accept_challenge] Creating game - isWhite:", isWhite);
+        
         const game = await gameService.createGame({
           whitePlayerId: isWhite ? challenge.fromUserId : challenge.toUserId,
           blackPlayerId: isWhite ? challenge.toUserId : challenge.fromUserId,
@@ -344,29 +364,28 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           incrementSeconds: challenge.incrementSeconds,
         });
 
-        if (!game) {
-          throw new Error("Failed to create game");
-        }
+        console.log("[lobby:accept_challenge] Game created:", !!game, game?.id);
 
-        // Do NOT start the game here — let game:join handle it when both players
-        // enter the room. This avoids duplicate game:started emissions and keeps
-        // the clock off until participants are actually in the room.
+        if (!game) {
+          console.error("[lobby:accept_challenge] Failed to create game - returned undefined");
+          socket.emit("error:generic", { code: "INTERNAL", message: "Failed to create game record" });
+          return;
+        }
 
         // Notify both players with just the gameId so they can navigate.
+        console.log("[lobby:accept_challenge] Sending challenge_accepted to acceptor");
         socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
         
-        // Notify challenger - use try-catch to avoid errors if user is offline
-        try {
-          io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
-            challengeId,
-            gameId: game.id,
-          });
-        } catch (emitErr) {
-          // Challenger may be offline - log but don't fail the accept
-          console.warn("[lobby:accept_challenge] Failed to notify challenger:", emitErr);
-        }
+        // Notify challenger via their user room
+        console.log("[lobby:accept_challenge] Sending challenge_accepted to challenger:", challenge.fromUserId);
+        io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
+          challengeId,
+          gameId: game.id,
+        });
+        
+        console.log("[lobby:accept_challenge] SUCCESS - Game ID:", game.id);
       } catch (err) {
-        console.error("[lobby:accept_challenge]", err);
+        console.error("[lobby:accept_challenge] UNCAUGHT ERROR:", err);
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to accept challenge" });
       }
     }
