@@ -185,26 +185,16 @@ export default function FriendsPage() {
   };
 
   const handleAcceptChallenge = () => {
-    console.log("[friends] handleAcceptChallenge called");
-    console.log("[friends] pendingChallenge:", pendingChallenge);
-    console.log("[friends] socketConnected:", socketConnected);
-    if (pendingChallenge && socketConnected) {
-      console.log("[friends] Calling acceptChallenge with:", pendingChallenge.challengeId);
+    if (pendingChallenge) {
       acceptChallenge(pendingChallenge.challengeId);
       clearPendingChallenge();
-    } else {
-      console.error("[friends] handleAcceptChallenge FAILED: pendingChallenge=", !!pendingChallenge, "socketConnected=", socketConnected);
     }
   };
 
   const handleDeclineChallenge = () => {
-    console.log("[friends] handleDeclineChallenge called");
-    if (pendingChallenge && socketConnected) {
-      console.log("[friends] Calling declineChallenge with:", pendingChallenge.challengeId);
+    if (pendingChallenge) {
       declineChallenge(pendingChallenge.challengeId);
       clearPendingChallenge();
-    } else {
-      console.error("[friends] handleDeclineChallenge FAILED: pendingChallenge=", !!pendingChallenge, "socketConnected=", socketConnected);
     }
   };
 

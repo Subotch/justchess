@@ -614,12 +614,31 @@ export const achievementService = {
    * Get all achievements with user's earned status.
    */
   async getUserAchievements(userId: string) {
-    const [allAchievements, userEarned] = await Promise.all([
+    let [allAchievements, userEarned] = await Promise.all([
       db.query.achievements.findMany(),
       db.query.userAchievements.findMany({
         where: eq(userAchievements.userId, userId),
       }),
     ]);
+
+    // Если таблица достижений пуста — засидить из определений кода
+    if (allAchievements.length === 0) {
+      await db
+        .insert(achievements)
+        .values(
+          ACHIEVEMENT_DEFINITIONS.map((d) => ({
+            id: d.id,
+            name: d.name,
+            description: d.description,
+            category: d.category,
+            points: d.points,
+            isSecret: d.isSecret,
+            criteria: d.criteria,
+          }))
+        )
+        .onConflictDoNothing();
+      allAchievements = await db.query.achievements.findMany();
+    }
 
     const earnedMap = new Map(
       userEarned.map((ua) => [ua.achievementId, ua])
