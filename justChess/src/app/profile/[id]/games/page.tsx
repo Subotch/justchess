@@ -88,12 +88,10 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
   useEffect(() => {
     setPage(1);
     fetchGames(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortBy, sortDir, gameType, timingCategory, debouncedOpponent]);
 
   useEffect(() => {
     fetchGames(page);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
   const dateTimeFormatter = useMemo(
