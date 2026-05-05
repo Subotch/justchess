@@ -226,8 +226,8 @@ export async function PATCH(
     if (preferences !== undefined) {
       // Merge with existing preferences
       const user = await db.query.users.findFirst({ where: eq(users.id, id) });
-      const existing = user?.preferences ? JSON.parse(user.preferences) : {};
-      updateData.preferences = JSON.stringify({ ...existing, ...preferences });
+      const existing = user?.preferences ?? {};
+      updateData.preferences = { ...existing, ...preferences };
     }
 
     const [updated] = await db
