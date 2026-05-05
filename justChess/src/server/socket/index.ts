@@ -18,8 +18,9 @@ import { clockManager } from "./clock-manager";
 
 // --- ДОБАВЛЕННЫЕ ИМПОРТЫ ---
 import { eq, or, and } from "drizzle-orm";
-import { db } from "@/db"; 
+import { db } from "@/db";
 import { users, friendships as friendshipsTable } from "@/db/schema";
+import { logger } from "@/server/logger";
 // ---------------------------
 
 export type AppServer = Server<
@@ -36,7 +37,7 @@ export function registerSocketHandlers(io: AppServer): void {
   // ── Connection handler ─────────────────────────────────────────────
   io.on("connection", async (socket) => {
     const { userId, username } = socket.data;
-    console.log(`[Socket] Connected: ${username} (${userId}) — ${socket.id}`);
+    logger.info({ userId, username, socketId: socket.id }, "[Socket] Connected");
 
     // Join personal room for direct notifications
     socket.join(`user:${userId}`);
@@ -45,7 +46,7 @@ export function registerSocketHandlers(io: AppServer): void {
     await db.update(users)
       .set({ isOnline: true, lastSeenAt: new Date() })
       .where(eq(users.id, userId))
-      .catch((error) => console.error("[Socket] Failed to update user status:", error));
+      .catch((error) => logger.error({ err: error }, "[Socket] Failed to update user status"));
 
     // Get user's friends and notify them
     const userFriendships = await db.query.friendships.findMany({
@@ -76,7 +77,7 @@ export function registerSocketHandlers(io: AppServer): void {
 
     // ── Disconnect ───────────────────────────────────────────────────
     socket.on("disconnect", async (reason) => {
-      console.log(`[Socket] Disconnected: ${username} — ${reason}`);
+      logger.info({ username, reason }, "[Socket] Disconnected");
 
       // If player was in a game, notify opponent and start reconnect timer
       if (socket.data.currentGameId) {
@@ -119,7 +120,7 @@ export function registerSocketHandlers(io: AppServer): void {
       db.update(users)
         .set({ isOnline: false, lastSeenAt: new Date() })
         .where(eq(users.id, userId))
-        .catch((error) => console.error("[Socket] Failed to update user status:", error));
+        .catch((error) => logger.error({ err: error }, "[Socket] Failed to update user status"));
 
       // Notify friends that user went offline
       db.query.friendships.findMany({
@@ -140,10 +141,10 @@ export function registerSocketHandlers(io: AppServer): void {
             username: username || "Unknown",
           });
         }
-      }).catch(console.error);
+      }).catch((err: unknown) => logger.error({ err }, "[Socket] Failed to notify friends offline"));
       // ----------------------------------------
     });
   });
 
-  console.log("[Socket.IO] Handlers registered");
+  logger.info("[Socket.IO] Handlers registered");
 }

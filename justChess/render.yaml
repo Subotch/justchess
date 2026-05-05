@@ -1,4 +1,4 @@
-не services:
+services:
   - type: web
     name: justchess
     env: node
@@ -12,6 +12,8 @@
       - key: DATABASE_URL
         sync: false
       - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: BETTER_AUTH_URL
         sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false

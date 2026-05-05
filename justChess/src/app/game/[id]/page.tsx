@@ -13,6 +13,7 @@ import { ChessBoard } from "@/components/game/chess-board";
 import { PlayerCard } from "@/components/game/player-card";
 import { GameControls } from "@/components/game/game-controls";
 import { MoveList } from "@/components/game/move-list";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 interface GamePageProps {
   params: Promise<{ id: string }>;
@@ -41,15 +42,8 @@ export default function GamePage({ params }: GamePageProps) {
     // loop: game:started → setGame → effect re-runs → joinGame → game:started …
   }, [gameId, session?.user?.id, isPending]);
 
-  if (!game) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-4xl mb-4 animate-spin">♟</div>
-          <p className="text-slate-400">Connecting to game...</p>
-        </div>
-      </div>
-    );
+  if (isPending || !game) {
+    return <LoadingSpinner fullscreen />;
   }
 
   const isFlipped = myColor === "black";

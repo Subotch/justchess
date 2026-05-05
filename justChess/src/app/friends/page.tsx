@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useSocket } from "@/hooks/use-socket";
 import { useLobbyStore } from "@/stores/lobby-store";
 import { notify } from "@/stores/notification-store";
@@ -199,11 +200,7 @@ export default function FriendsPage() {
   };
 
   if (isPending || loading) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900 dark:bg-slate-900 dark:text-white">
-        <div className="mx-auto max-w-5xl" suppressHydrationWarning>{t('common.loading')}</div>
-      </main>
-    );
+    return <LoadingSpinner fullscreen />;
   }
 
   if (!session?.user) {

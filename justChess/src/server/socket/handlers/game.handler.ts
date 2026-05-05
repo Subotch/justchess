@@ -11,6 +11,8 @@ import { gameService } from "@/services/game.service";
 import { clockManager } from "../clock-manager";
 import type { PieceColor } from "@/types/game";
 import { withRateLimit } from "../middleware/rate-limit.middleware";
+import { getBestMove } from "@/server/stockfish/stockfish-pool";
+import { logger } from "@/server/logger";
 
 type AppSocket = Socket<any, any, any, SocketData>;
 
@@ -292,7 +294,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         });
       }
     } catch (err) {
-      console.error("[game:join]", err);
+      logger.error({ err }, "[game:join]");
       socket.emit("error:generic", { code: "INTERNAL", message: "Failed to join game" });
     }
   });
@@ -335,9 +337,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
       // the increment was actually applied (false ⇒ stale call, ignore).
       const switchResult = await clockManager.switchTurn(gameId, clockState?.activeColor);
       if (!switchResult.appliedIncrement) {
-        console.warn(
-          `[game:move] Turn switch for game ${gameId} did not apply increment: ${switchResult.reason ?? "unknown"}`
-        );
+        logger.warn({ gameId, reason: switchResult.reason }, "[game:move] Turn switch did not apply increment");
         // No retry needed — if color mismatched, another move already processed.
       }
       const newClockState = clockManager.getGameState(gameId);
@@ -400,7 +400,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         }
       }
     } catch (err) {
-      console.error("[game:move]", err);
+      logger.error({ err }, "[game:move]");
       socket.emit("error:generic", { code: "INTERNAL", message: "Move failed" });
     }
   });
@@ -434,7 +434,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
 
       await notifyAchievements(io, gameId);
     } catch (err) {
-      console.error("[game:resign]", err);
+      logger.error({ err }, "[game:resign]");
       socket.emit("error:generic", { code: "INTERNAL", message: "Resign failed" });
     }
   });
@@ -459,7 +459,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
       // Notify opponent
       socket.to(room).emit("game:draw_offered", { gameId, byColor: result.color });
     } catch (err) {
-      console.error("[game:offer_draw]", err);
+      logger.error({ err }, "[game:offer_draw]");
     }
   });
 
@@ -494,7 +494,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
       io.to(room).emit("game:ended", endPayload);
       io.to(SOCKET_ROOMS.spectator(gameId)).emit("game:ended", endPayload);
     } catch (err) {
-      console.error("[game:accept_draw]", err);
+      logger.error({ err }, "[game:accept_draw]");
     }
   });
 
@@ -510,7 +510,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
 
       socket.to(room).emit("game:draw_declined", { gameId, byColor: color });
     } catch (err) {
-      console.error("[game:decline_draw]", err);
+      logger.error({ err }, "[game:decline_draw]");
     }
   });
 
@@ -531,7 +531,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         sentAt: new Date().toISOString(),
       });
     } catch (err) {
-      console.error("[game:chat_message]", err);
+      logger.error({ err }, "[game:chat_message]");
     }
   });
 }
@@ -544,7 +544,7 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
   try {
     const game = await gameService.getGame(gameId);
     if (!game || !game.isAiGame || game.status !== "active") {
-      console.log("[AI] Skipping - game not valid or not active");
+      logger.debug({ gameId }, "[AI] Skipping - game not valid or not active");
       return;
     }
 
@@ -562,28 +562,45 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
     const aiColor: PieceColor = (game.aiColor as PieceColor) ?? "black";
     const currentTurn: PieceColor = chess.turn() === "w" ? "white" : "black";
     
-    console.log(`[AI] Game ${gameId} - AI color: ${aiColor}, Current turn: ${currentTurn}, Moves: ${existingMoves.length}`);
-    
+    logger.debug({ gameId, aiColor, currentTurn, movesCount: existingMoves.length }, "[AI] Game state");
+
     if (currentTurn !== aiColor) {
-      console.log("[AI] Not AI's turn");
+      logger.debug({ gameId }, "[AI] Not AI's turn");
       return;
     }
 
     const possibleMoves = chess.moves({ verbose: true });
     if (!possibleMoves.length) {
-      console.log("[AI] No moves available");
+      logger.debug({ gameId }, "[AI] No moves available");
       return;
     }
 
-    const moveIndex = pickAiMoveIndex(possibleMoves.length, game.aiDifficulty ?? 5);
-    const selectedMove = possibleMoves[moveIndex];
+    const difficulty = game.aiDifficulty ?? 5;
 
-    console.log(`[AI] Making move: ${selectedMove.san}`);
+    // Используем Stockfish pool (если пул инициализирован) или fallback на случайный ход
+    let selectedMove: typeof possibleMoves[number];
+    try {
+      const currentFen = chess.fen();
+      // Конвертируем difficulty (1-20) в глубину поиска (1-15)
+      const depth = Math.max(1, Math.round(difficulty * 0.75));
+      const bestMoveUci = await getBestMove(currentFen, depth, difficulty);
+      const stockfishMove = possibleMoves.find(
+        (m) => `${m.from}${m.to}${m.promotion ?? ""}` === bestMoveUci ||
+               `${m.from}${m.to}` === bestMoveUci.slice(0, 4)
+      );
+      selectedMove = stockfishMove ?? possibleMoves[pickAiMoveIndex(possibleMoves.length, difficulty)];
+      logger.debug({ gameId, san: selectedMove.san }, "[AI] Stockfish move selected");
+    } catch (sfErr) {
+      logger.warn({ err: sfErr, gameId }, "[AI] Stockfish unavailable, using fallback");
+      const moveIndex = pickAiMoveIndex(possibleMoves.length, difficulty);
+      selectedMove = possibleMoves[moveIndex];
+    }
 
-    // For AI games: if AI is white, use whitePlayerId; if AI is black, use blackPlayerId
+    logger.debug({ gameId, san: selectedMove.san }, "[AI] Making move");
+
     const aiUserId = aiColor === "white" ? game.whitePlayerId : game.blackPlayerId;
     if (!aiUserId) {
-      console.error("[AI] No user ID for AI - whitePlayerId:", game.whitePlayerId, "blackPlayerId:", game.blackPlayerId);
+      logger.error({ gameId, whitePlayerId: game.whitePlayerId, blackPlayerId: game.blackPlayerId }, "[AI] No user ID for AI");
       return;
     }
 
@@ -595,8 +612,8 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
       promotion: (selectedMove.promotion as "q" | "r" | "b" | "n" | undefined) ?? undefined,
     });
 
-if (!result.success) {
-      console.error("[AI] Move failed", result.error);
+    if (!result.success) {
+      logger.error({ gameId, error: result.error }, "[AI] Move failed");
       return;
     }
 
@@ -605,9 +622,7 @@ if (!result.success) {
     const aiClockState = clockManager.getGameState(gameId);
     const switchResult = await clockManager.switchTurn(gameId, aiClockState?.activeColor);
     if (!switchResult.appliedIncrement) {
-      console.warn(
-        `[AI] Turn switch for game ${gameId} did not apply increment: ${switchResult.reason ?? "unknown"}`
-      );
+      logger.warn({ gameId, reason: switchResult.reason }, "[AI] Turn switch did not apply increment");
     }
     const newClockState = clockManager.getGameState(gameId);
 
@@ -651,7 +666,7 @@ if (!result.success) {
       await notifyAchievements(io, gameId);
     }
   } catch (error) {
-    console.error("[AI] makeAiMove failed", error);
+    logger.error({ err: error, gameId }, "[AI] makeAiMove failed");
   }
 }
 
@@ -698,6 +713,6 @@ async function notifyAchievements(io: AppServer, gameId: string): Promise<void> 
       }
     }
   } catch (err) {
-    console.error("[notifyAchievements]", err);
+    logger.error({ err }, "[notifyAchievements]");
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, use, useCallback } from "react";
 import Link from "next/link";
 import { useTranslation } from "@/lib/i18n";
 import type { ApiResponse } from "@/types/api";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type ProfileGamesPageProps = {
   params: Promise<{ id: string }>;
@@ -211,9 +212,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
         {/* Table */}
         <div className="rounded-2xl border border-slate-700 bg-slate-800 shadow-sm">
           {loading ? (
-            <div className="p-8 text-center text-slate-400" suppressHydrationWarning>
-              {t("common.loading")}
-            </div>
+            <LoadingSpinner />
           ) : items.length === 0 ? (
             <div className="p-8 text-center text-slate-400" suppressHydrationWarning>
               {t("gamesHistory.noGames")}

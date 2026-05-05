@@ -10,6 +10,10 @@ import { gameService } from "@/services/game.service";
 import { clockManager } from "../clock-manager";
 import { SOCKET_ROOMS } from "@/types/socket";
 import { db } from "@/db";
+import { userStats } from "@/db/schema";
+import { eq, sql as sqlRaw } from "drizzle-orm";
+import { getTimingCategory } from "@/types/game";
+import { logger } from "@/server/logger";
 
 type AppSocket = Socket<any, any, any, SocketData>;
 
@@ -29,7 +33,7 @@ interface Challenge {
 const pendingChallenges = new Map<string, Challenge>();
 
 export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
-  console.log("[lobby:handlers] Registered for socket:", socket.id);
+  logger.info({ socketId: socket.id }, "[lobby:handlers] Registered");
   // ── lobby:join_queue ─────────────────────────────────────────────────
   socket.on(
     "lobby:join_queue",
@@ -46,11 +50,6 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         const { userId, username } = socket.data;
 
         // Get user rating
-        const { db } = await import("@/db");
-        const { userStats } = await import("@/db/schema");
-        const { eq } = await import("drizzle-orm");
-        const { getTimingCategory } = await import("@/types/game");
-
         const stats = await db.query.userStats.findFirst({
           where: eq(userStats.userId, userId),
         });
@@ -189,7 +188,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           });
         }
       } catch (err) {
-        console.error("[lobby:join_queue]", err);
+        logger.error({ err }, "[lobby:join_queue]");
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to join queue" });
       }
     }
@@ -219,11 +218,6 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         const { userId, username } = socket.data;
 
         // Get challenger rating
-        const { db } = await import("@/db");
-        const { userStats } = await import("@/db/schema");
-        const { eq } = await import("drizzle-orm");
-        const { getTimingCategory } = await import("@/types/game");
-
         const stats = await db.query.userStats.findFirst({
           where: eq(userStats.userId, userId),
         });
@@ -269,46 +263,33 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             expiresAt: new Date(expiresAt).toISOString(),
           });
         } catch (emitErr) {
-          console.error("[lobby:challenge_friend] Failed to notify friend:", emitErr);
+          logger.error({ err: emitErr }, "[lobby:challenge_friend] Failed to notify friend");
           socket.emit("error:generic", { code: "INTERNAL", message: "Failed to send challenge" });
           return;
         }
       } catch (err) {
-        console.error("[lobby:challenge_friend]", err);
+        logger.error({ err }, "[lobby:challenge_friend]");
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to send challenge" });
       }
     }
   );
 
   // ── lobby:accept_challenge ───────────────────────────────────────────
-  console.log("[lobby:handlers] Registering lobby:accept_challenge handler");
   socket.on(
     "lobby:accept_challenge",
     async ({ challengeId }: { challengeId: string }) => {
-      console.log("[lobby:accept_challenge] EVENT FIRED! challengeId:", challengeId);
-      console.log("[lobby:accept_challenge] io object:", typeof io, io !== undefined);
+      logger.info({ challengeId, userId: socket.data.userId }, "[lobby:accept_challenge] received");
       try {
-        console.log("[lobby:accept_challenge] Received challengeId:", challengeId);
-        console.log("[lobby:accept_challenge] Current user:", socket.data.userId);
-        
         const challenge = pendingChallenges.get(challengeId);
-        console.log("[lobby:accept_challenge] Challenge found:", !!challenge);
-        
+
         if (!challenge) {
-          console.error("[lobby:accept_challenge] Challenge not found or expired");
+          logger.error({ challengeId }, "[lobby:accept_challenge] Challenge not found or expired");
           socket.emit("error:generic", { code: "NOT_FOUND", message: "Challenge not found or expired" });
           return;
         }
 
-        console.log("[lobby:accept_challenge] Challenge details:", {
-          fromUserId: challenge.fromUserId,
-          toUserId: challenge.toUserId,
-          timeControlMinutes: challenge.timeControlMinutes,
-          incrementSeconds: challenge.incrementSeconds,
-        });
-
         if (challenge.toUserId !== socket.data.userId) {
-          console.error("[lobby:accept_challenge] Not your challenge");
+          logger.error({ challengeId }, "[lobby:accept_challenge] Not your challenge");
           socket.emit("error:generic", { code: "FORBIDDEN", message: "Not your challenge" });
           return;
         }
@@ -316,16 +297,9 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         // Clear expiry timer
         clearTimeout(challenge.timer);
         pendingChallenges.delete(challengeId);
-        console.log("[lobby:accept_challenge] Challenge removed from pending");
 
         // Get fresh ratings from DB for both players
-        const { db } = await import("@/db");
-        const { userStats } = await import("@/db/schema");
-        const { eq } = await import("drizzle-orm");
-        const { getTimingCategory } = await import("@/types/game");
-
         const timingCategory = getTimingCategory(challenge.timeControlMinutes);
-        console.log("[lobby:accept_challenge] Timing category:", timingCategory);
 
         // Fetch fromUser rating
         const fromStats = await db.query.userStats.findFirst({
@@ -340,8 +314,6 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             case "classical": fromRating = fromStats.ratingClassical; break;
           }
         }
-        console.log("[lobby:accept_challenge] From rating:", fromRating);
-
         // Fetch toUser rating
         const toStats = await db.query.userStats.findFirst({
           where: eq(userStats.userId, challenge.toUserId),
@@ -355,23 +327,19 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             case "classical": toRating = toStats.ratingClassical; break;
           }
         }
-        console.log("[lobby:accept_challenge] To rating:", toRating);
-
-        // Create game (challenger is white by default, or random)
+        // Create game (random color assignment)
         const isWhite = Math.random() < 0.5;
-        console.log("[lobby:accept_challenge] Creating game - isWhite:", isWhite);
 
         // Determine if 'friendly' enum value is available in DB; fall back to 'casual'
         let resolvedGameType: "friendly" | "casual" = "friendly";
         try {
-          const { sql: sqlRaw } = await import("drizzle-orm");
           const result = await db.execute(sqlRaw`SELECT enumlabel FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'game_type' AND e.enumlabel = 'friendly'`);
           if (!result.rows || result.rows.length === 0) {
-            console.warn("[lobby:accept_challenge] 'friendly' enum not in DB, falling back to 'casual'. Run: npm run db:migrate");
+            logger.warn("[lobby:accept_challenge] 'friendly' enum not in DB, falling back to 'casual'. Run: npm run db:migrate");
             resolvedGameType = "casual";
           }
         } catch (enumCheckErr) {
-          console.warn("[lobby:accept_challenge] Could not check enum, using 'casual' fallback:", enumCheckErr);
+          logger.warn({ err: enumCheckErr }, "[lobby:accept_challenge] Could not check enum, using 'casual' fallback");
           resolvedGameType = "casual";
         }
 
@@ -383,40 +351,27 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           incrementSeconds: challenge.incrementSeconds,
         });
 
-        console.log("[lobby:accept_challenge] Game created:", !!game, game?.id);
-
         if (!game) {
-          console.error("[lobby:accept_challenge] Failed to create game - returned undefined");
+          logger.error({ challengeId }, "[lobby:accept_challenge] Failed to create game - returned undefined");
           socket.emit("error:generic", { code: "INTERNAL", message: "Failed to create game record" });
           return;
         }
 
         // Notify both players with just the gameId so they can navigate.
-        console.log("[lobby:accept_challenge] Sending challenge_accepted to acceptor");
         socket.emit("lobby:challenge_accepted", { challengeId, gameId: game.id });
-        
-        // Notify challenger via their user room
-        console.log("[lobby:accept_challenge] About to notify challenger:", challenge.fromUserId);
-        console.log("[lobby:accept_challenge] io type:", typeof io);
-        console.log("[lobby:accept_challenge] io.to type:", typeof io.to);
-        
-        const challengerRoom = `user:${challenge.fromUserId}`;
-        console.log("[lobby:accept_challenge] Challenger room:", challengerRoom);
-        
+
         try {
-          io.to(challengerRoom).emit("lobby:challenge_accepted", {
+          io.to(`user:${challenge.fromUserId}`).emit("lobby:challenge_accepted", {
             challengeId,
             gameId: game.id,
           });
-          console.log("[lobby:accept_challenge] Successfully notified challenger");
         } catch (emitErr) {
-          console.error("[lobby:accept_challenge] ERROR notifying challenger:", emitErr);
-          // Don't fail the accept - challenger may be offline
+          logger.error({ err: emitErr }, "[lobby:accept_challenge] ERROR notifying challenger");
         }
-        
-        console.log("[lobby:accept_challenge] SUCCESS - Game ID:", game.id);
+
+        logger.info({ gameId: game.id }, "[lobby:accept_challenge] SUCCESS");
       } catch (err) {
-        console.error("[lobby:accept_challenge] UNCAUGHT ERROR:", err);
+        logger.error({ err }, "[lobby:accept_challenge] UNCAUGHT ERROR");
         socket.emit("error:generic", { code: "INTERNAL", message: "Failed to accept challenge" });
       }
     }
@@ -438,7 +393,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           challengeId,
         });
       } catch (emitErr) {
-        console.warn("[lobby:decline_challenge] Failed to notify challenger:", emitErr);
+        logger.warn({ err: emitErr }, "[lobby:decline_challenge] Failed to notify challenger");
       }
     }
   );

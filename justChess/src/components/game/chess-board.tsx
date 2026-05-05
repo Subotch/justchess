@@ -6,6 +6,7 @@
 
 import { useCallback, useState, useRef } from "react";
 import { Chessboard } from "react-chessboard";
+import { Chess } from "chess.js";
 import { useGameStore } from "@/stores/game-store";
 import { useUserStore } from "@/stores/user-store";
 import { useSocket } from "@/hooks/use-socket";
@@ -55,11 +56,22 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
     });
   }
 
-  // Check highlight
+  // Check highlight — find king of the side to move and mark red
   const gameState = getGameState(fen);
   if (gameState.isCheck && !gameState.isCheckmate) {
-    // Find king square and highlight in red
-    // (simplified — react-chessboard handles this via custom styles)
+    const _chess = new Chess(fen);
+    const inCheckColor = _chess.turn(); // 'w' | 'b'
+    const board = _chess.board();
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const sq = board[r][c];
+        if (sq && sq.type === "k" && sq.color === inCheckColor) {
+          const file = String.fromCharCode(97 + c);
+          const rank = 8 - r;
+          customSquareStyles[`${file}${rank}`] = { backgroundColor: "rgba(220, 0, 0, 0.6)" };
+        }
+      }
+    }
   }
 
   const handleSquareClick = useCallback(
@@ -68,11 +80,13 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
 
       // If a piece is already selected and this is a legal move target
       if (selectedSquare && legalMoves.includes(square)) {
-        // Check if promotion needed
-        const piece = game?.fen ? null : null; // simplified
+        // Check if promotion needed — only pawns can promote
+        const _chess2 = new Chess(fen);
+        const piece = _chess2.get(selectedSquare as Parameters<typeof _chess2.get>[0]);
         const isPromotion =
-          (myColor === "white" && square[1] === "8") ||
-          (myColor === "black" && square[1] === "1");
+          piece?.type === "p" &&
+          ((myColor === "white" && square[1] === "8") ||
+            (myColor === "black" && square[1] === "1"));
 
         if (isPromotion) {
           setPromotionMove({ from: selectedSquare, to: square });

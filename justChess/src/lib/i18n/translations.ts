@@ -101,6 +101,11 @@ export const translations = {
       drawOffered: 'Draw offered',
       drawAccepted: 'Draw accepted',
       drawDeclined: 'Draw declined',
+      moveOf: 'Move {{current}} of {{total}}',
+      startingPosition: 'Starting position',
+      noMovesYet: 'No moves yet',
+      downloadPgn: 'Download PGN',
+      reviewGame: 'Review game',
     },
     // Settings
     settings: {
@@ -348,6 +353,11 @@ export const translations = {
       drawOffered: 'Предложена ничья',
       drawAccepted: 'Ничья принята',
       drawDeclined: 'Ничья отклонена',
+      moveOf: 'Ход {{current}} из {{total}}',
+      startingPosition: 'Начальная позиция',
+      noMovesYet: 'Ходов пока нет',
+      downloadPgn: 'Скачать PGN',
+      reviewGame: 'Разбор партии',
     },
     // Settings
     settings: {

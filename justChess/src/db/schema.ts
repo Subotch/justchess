@@ -15,6 +15,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   primaryKey,
@@ -26,6 +27,28 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+
+// ─────────────────────────────────────────────
+// PREFERENCES TYPE
+// ─────────────────────────────────────────────
+
+export type PreferencesData = {
+  theme: "system" | "light" | "dark";
+  boardTheme: "classic" | "wood" | "green" | "blue";
+  pieceSet: "standard" | "neo" | "alpha";
+  soundEnabled: boolean;
+  showCoordinates: boolean;
+  autoPromoteToQueen: boolean;
+};
+
+export const DEFAULT_PREFERENCES: PreferencesData = {
+  theme: "system",
+  boardTheme: "classic",
+  pieceSet: "standard",
+  soundEnabled: true,
+  showCoordinates: true,
+  autoPromoteToQueen: false,
+};
 
 // ─────────────────────────────────────────────
 // ENUMS
@@ -106,8 +129,10 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    // Preferences stored as JSON text
-    preferences: text("preferences").default('{"theme":"system","boardTheme":"classic","pieceSet":"standard","soundEnabled":true,"showCoordinates":true,"autoPromoteToQueen":false}'),
+    // Preferences stored as JSONB
+    preferences: jsonb("preferences")
+      .$type<PreferencesData>()
+      .default(DEFAULT_PREFERENCES),
   },
   (t) => [
     index("users_email_idx").on(t.email),
