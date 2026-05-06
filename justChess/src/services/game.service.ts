@@ -43,12 +43,14 @@ export interface CreateGameOptions {
 
 export interface MakeMoveOptions {
   gameId: string;
-  userId: string;
+  userId: string | null;
   from: string;
   to: string;
   promotion?: "q" | "r" | "b" | "n";
   timeSpentMs?: number;
   clockRemainingMs?: number;
+  /** Set true when the move is made by the AI engine (no userId validation) */
+  isAiMove?: boolean;
 }
 
 export interface MakeMoveResult {
@@ -161,7 +163,7 @@ export const gameService = {
    * All moves MUST go through this function.
    */
   async makeMove(options: MakeMoveOptions): Promise<MakeMoveResult> {
-    const { gameId, userId, from, to, promotion, timeSpentMs, clockRemainingMs } = options;
+    const { gameId, userId, from, to, promotion, timeSpentMs, clockRemainingMs, isAiMove } = options;
 
     // 1. Load game from DB
     const game = await db.query.games.findFirst({
@@ -172,11 +174,28 @@ export const gameService = {
     if (game.status !== "active") return { success: false, error: "Game is not active" };
 
     // 2. Determine player color
-    const isWhite = game.whitePlayerId === userId;
-    const isBlack = game.blackPlayerId === userId;
-    if (!isWhite && !isBlack) return { success: false, error: "Not a participant" };
-
-    const playerColor: PieceColor = isWhite ? "white" : "black";
+    let playerColor: PieceColor;
+    if (isAiMove) {
+      // For AI moves we trust the caller — determine color by current turn
+      const chess = new Chess();
+      const existingMovesForColor = await db.query.gameMoves.findMany({
+        where: eq(gameMoves.gameId, gameId),
+        orderBy: [asc(gameMoves.createdAt)],
+      });
+      for (const m of existingMovesForColor) {
+        chess.move({
+          from: m.uci.slice(0, 2),
+          to: m.uci.slice(2, 4),
+          promotion: m.uci.length >= 5 ? (m.uci[4] as "q" | "r" | "b" | "n") : undefined,
+        });
+      }
+      playerColor = chess.turn() === "w" ? "white" : "black";
+    } else {
+      const isWhite = game.whitePlayerId === userId;
+      const isBlack = game.blackPlayerId === userId;
+      if (!isWhite && !isBlack) return { success: false, error: "Not a participant" };
+      playerColor = isWhite ? "white" : "black";
+    }
 
     // 3. Reconstruct board from existing moves
     const chess = new Chess();

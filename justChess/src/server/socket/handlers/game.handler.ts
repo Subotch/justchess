@@ -598,15 +598,10 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
 
     logger.debug({ gameId, san: selectedMove.san }, "[AI] Making move");
 
-    const aiUserId = aiColor === "white" ? game.whitePlayerId : game.blackPlayerId;
-    if (!aiUserId) {
-      logger.error({ gameId, whitePlayerId: game.whitePlayerId, blackPlayerId: game.blackPlayerId }, "[AI] No user ID for AI");
-      return;
-    }
-
     const result = await gameService.makeMove({
       gameId,
-      userId: aiUserId,
+      userId: null,
+      isAiMove: true,
       from: selectedMove.from,
       to: selectedMove.to,
       promotion: (selectedMove.promotion as "q" | "r" | "b" | "n" | undefined) ?? undefined,
