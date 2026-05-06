@@ -28,7 +28,10 @@ interface PendingRequest {
 }
 
 const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2));
-const WORKER_PATH = path.resolve(__dirname, "./stockfish-worker.js");
+// Воркер компилируется в dist/stockfish/stockfish-worker.js во время npm run build.
+// Используем process.cwd() (корень проекта), так как __dirname при tsx указывает на исходник,
+// а не на скомпилированный файл.
+const WORKER_PATH = path.resolve(process.cwd(), "dist/stockfish/stockfish-worker.js");
 
 const pool: PoolSlot[] = [];
 const queue: PendingRequest[] = [];
@@ -129,11 +132,13 @@ function executeOnSlot(
 ): void {
   slot.busy = true;
 
+  // Таймаут: 30 сек для глубоких поисков (depth 20+), 10 сек для остальных
+  const timeoutMs = depth >= 20 ? 30_000 : 10_000;
   const timeout = setTimeout(() => {
     slot.busy = false;
     reject(new Error(`[stockfish-pool] Worker #${slot.id} timeout`));
     drainQueue();
-  }, 10_000);
+  }, timeoutMs);
 
   const messageHandler = ({ type, move, error }: { type: string; move?: string; error?: string }) => {
     clearTimeout(timeout);

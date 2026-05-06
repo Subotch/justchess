@@ -76,6 +76,12 @@ export function useSocket() {
     };
     socket.on("connect", handleReconnect);
 
+    // ── Session eviction ─────────────────────────────────────────────
+    socket.on("auth:session_evicted", ({ reason }) => {
+      notify.error("Сессия завершена", `${reason}`);
+      socket.disconnect();
+    });
+
     // ── Game events ──────────────────────────────────────────────────
     socket.on("game:started", ({ game }) => {
       const wasAlreadySet = !!useGameStore.getState().game;

@@ -45,7 +45,7 @@ type ClockTickCallback = (state: {
   activeColor: PieceColor;
 }) => void;
 
-type TimeoutCallback = () => void;
+type TimeoutCallback = (timedOutColor: PieceColor) => void;
 
 class ClockManager {
   private clocks = new Map<string, GameClockState>();
@@ -122,10 +122,11 @@ class ClockManager {
       state.activeColor === "white" ? state.whiteTimeMs : state.blackTimeMs;
 
     if (activeTime <= 0) {
-      // Save callback before stopClock, which deletes it from the map
+      // Capture timedOutColor BEFORE stopClock deletes the state from the map
+      const timedOutColor: PieceColor = state.activeColor;
       const onTimeout = this.timeoutCallbacks.get(gameId);
       this.stopClock(gameId);
-      if (onTimeout) onTimeout();
+      if (onTimeout) onTimeout(timedOutColor);
     }
   }
 

@@ -50,13 +50,14 @@ export default function GamePage({ params }: GamePageProps) {
   const topPlayer = isFlipped ? game.white : game.black;
   const bottomPlayer = isFlipped ? game.black : game.white;
 
+  const gameOver = game.status !== "active";
   const topPlayerState = {
     ...topPlayer,
-    isActive: game.currentTurn === topPlayer.color,
+    isActive: !gameOver && game.currentTurn === topPlayer.color,
   };
   const bottomPlayerState = {
     ...bottomPlayer,
-    isActive: game.currentTurn === bottomPlayer.color,
+    isActive: !gameOver && game.currentTurn === bottomPlayer.color,
   };
 
   return (

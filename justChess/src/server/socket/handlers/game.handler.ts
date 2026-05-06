@@ -51,6 +51,61 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
           const started = await gameService.startGame(gameId);
           if (!started) return;
 
+          // Only start the clock if it's not already running (guards against race
+          // condition where both players emit game:join simultaneously).
+          if (clockManager.getGameState(gameId)) {
+            // Clock already started by the other player's join — skip startClock.
+            // Still send game:started to this socket so the UI is populated.
+            const timeMs = started.timeControlMinutes * 60 * 1000;
+            const existingClockState = clockManager.getGameState(gameId)!;
+            const initialGameState = {
+              id: started.id,
+              status: "active",
+              gameType: started.gameType as any,
+              timingCategory: started.timingCategory as any,
+              timeControlMinutes: started.timeControlMinutes,
+              incrementSeconds: started.incrementSeconds,
+              white: {
+                id: game.whitePlayerId!,
+                username: (game as any).whitePlayer?.username ?? "Player",
+                name: (game as any).whitePlayer?.name ?? "Player",
+                image: (game as any).whitePlayer?.image ?? null,
+                rating: started.whiteRatingBefore ?? 1200,
+                color: "white",
+                timeRemainingMs: existingClockState.whiteTimeMs,
+                isConnected: true,
+              },
+              black: {
+                id: game.blackPlayerId ?? "ai",
+                username: game.isAiGame
+                  ? `AI Level ${game.aiDifficulty}`
+                  : (game as any).blackPlayer?.username ?? "Player",
+                name: game.isAiGame
+                  ? `AI Level ${game.aiDifficulty}`
+                  : (game as any).blackPlayer?.name ?? "Player",
+                image: null,
+                rating: started.blackRatingBefore ?? 1200,
+                color: "black",
+                timeRemainingMs: existingClockState.blackTimeMs,
+                isConnected: true,
+              },
+              fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+              pgn: "",
+              moves: [],
+              currentTurn: "white" as const,
+              moveCount: 0,
+              result: "in_progress",
+              isAiGame: started.isAiGame,
+              aiDifficulty: started.aiDifficulty ?? undefined,
+              aiColor: (started.aiColor as import("@/types/game").PieceColor) ?? "black",
+              spectatorCount: 0,
+              startedAt: started.startedAt?.toISOString(),
+              createdAt: started.createdAt.toISOString(),
+            };
+            socket.emit("game:started", { game: initialGameState });
+            return;
+          }
+
           // Start clock
           const timeMs = started.timeControlMinutes * 60 * 1000;
           const incrementMs = started.incrementSeconds * 1000;
@@ -72,14 +127,10 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
                 activeColor,
               });
             },
-            // onTimeout
-            async () => {
-              const clockState = clockManager.getGameState(gameId);
-              if (!clockState) return;
-              const timedOut =
-                clockState.whiteTimeMs <= 0 ? "white" : "black";
-              await gameService.handleTimeout(gameId, timedOut);
-              const result = timedOut === "white" ? "black_wins" : "white_wins";
+            // onTimeout — timedOutColor is passed directly by ClockManager
+            async (timedOutColor) => {
+              await gameService.handleTimeout(gameId, timedOutColor);
+              const result = timedOutColor === "white" ? "black_wins" : "white_wins";
               io.to(room).emit("game:ended", {
                 gameId,
                 result,
@@ -308,11 +359,28 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
 
       // Get current clock times
       const clockState = clockManager.getGameState(gameId);
-      const timeRemaining = clockState
-        ? clockState.activeColor === "white"
-          ? clockState.whiteTimeMs
-          : clockState.blackTimeMs
-        : undefined;
+
+      // If clock was stopped (timeout already fired) — reject the move
+      if (!clockState) {
+        socket.emit("error:invalid_move", {
+          gameId,
+          reason: "Game is not active (clock stopped)",
+        });
+        return;
+      }
+
+      const timeRemaining = clockState.activeColor === "white"
+        ? clockState.whiteTimeMs
+        : clockState.blackTimeMs;
+
+      // Reject move if active player's clock has run out
+      if (timeRemaining <= 0) {
+        socket.emit("error:invalid_move", {
+          gameId,
+          reason: "Time is up",
+        });
+        return;
+      }
 
       const result = await gameService.makeMove({
         gameId,
@@ -581,8 +649,11 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
     let selectedMove: typeof possibleMoves[number];
     try {
       const currentFen = chess.fen();
-      // Конвертируем difficulty (1-20) в глубину поиска (1-15)
-      const depth = Math.max(1, Math.round(difficulty * 0.75));
+      // Конвертируем difficulty (1-20) в глубину поиска:
+      // 1 → 1, 10 → 8, 20 → 22 (глубокий поиск на макс. сложности)
+      const depth = difficulty >= 20
+        ? 22
+        : Math.max(1, Math.round(difficulty * 0.75));
       const bestMoveUci = await getBestMove(currentFen, depth, difficulty);
       const stockfishMove = possibleMoves.find(
         (m) => `${m.from}${m.to}${m.promotion ?? ""}` === bestMoveUci ||

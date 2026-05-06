@@ -3,9 +3,11 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "dist",
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "isolatedModules": false
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "isolatedModules": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "include": [
     "src/server/**/*.ts",

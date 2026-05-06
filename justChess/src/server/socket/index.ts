@@ -39,6 +39,20 @@ export function registerSocketHandlers(io: AppServer): void {
     const { userId, username } = socket.data;
     logger.info({ userId, username, socketId: socket.id }, "[Socket] Connected");
 
+    // ── Single-session enforcement ─────────────────────────────────────
+    // Disconnect all existing sockets for this user before joining the room
+    const existingSockets = await io.in(`user:${userId}`).fetchSockets();
+    for (const existing of existingSockets) {
+      if (existing.id !== socket.id) {
+        logger.info({ userId, evictedSocketId: existing.id }, "[Socket] Evicting previous session");
+        existing.emit("auth:session_evicted", {
+          reason: "New login from another device",
+        });
+        existing.disconnect(true);
+      }
+    }
+    // ──────────────────────────────────────────────────────────────────
+
     // Join personal room for direct notifications
     socket.join(`user:${userId}`);
 

@@ -3,7 +3,7 @@ services:
     name: justchess
     env: node
     buildCommand: npm ci && npm run build
-    startCommand: node server.js
+    startCommand: npx tsx server.js
     envVars:
       - key: NODE_ENV
         value: production
@@ -12,8 +12,6 @@ services:
       - key: DATABASE_URL
         sync: false
       - key: BETTER_AUTH_SECRET
-        sync: false
-      - key: BETTER_AUTH_URL
         sync: false
       - key: BETTER_AUTH_URL
         sync: false

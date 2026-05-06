@@ -5,7 +5,7 @@ validateEnv();
 
 // Custom Node.js server integrating Next.js + Socket.IO
 // This is required because Next.js API routes don't support WebSocket upgrades natively.
-// Run with: node server.js
+// Run with: npx tsx server.js  (tsx transpiles TypeScript require() on the fly)
 
 const { createServer } = require("http");
 const { parse } = require("url");

@@ -117,6 +117,11 @@ export interface ClientToServerEvents {
 
 export interface ServerToClientEvents {
   /**
+   * Session was evicted because a new login occurred from another device.
+   */
+  "auth:session_evicted": (payload: { reason: string }) => void;
+
+  /**
    * Game has started — sent to both players.
    */
   "game:started": (payload: { game: GameState }) => void;

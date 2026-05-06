@@ -32,6 +32,29 @@ interface Challenge {
 
 const pendingChallenges = new Map<string, Challenge>();
 
+/**
+ * Clear matchmaking queue state on all sockets of a given user.
+ * Called when a match is found for a user that was waiting in the queue.
+ */
+async function clearQueueSocketState(io: AppServer, userId: string): Promise<void> {
+  try {
+    const sockets = await io.in(`user:${userId}`).fetchSockets();
+    for (const s of sockets) {
+      const data = (s as any).data;
+      if (data) {
+        clearInterval(data.matchInterval);
+        data.matchInterval = undefined;
+        data.isInQueue = false;
+      }
+      try {
+        (s as any).leave("lobby");
+      } catch {}
+    }
+  } catch (err) {
+    logger.error({ err, userId }, "[lobby] Failed to clear queue state for user");
+  }
+}
+
 export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
   logger.info({ socketId: socket.id }, "[lobby:handlers] Registered");
   // ── lobby:join_queue ─────────────────────────────────────────────────
@@ -90,6 +113,12 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           const myColor = isWhite ? "white" : "black";
           const opponentColor = isWhite ? "black" : "white";
 
+          // Clear queue state for opponent (they were waiting in queue)
+          await clearQueueSocketState(io, opponent.userId);
+          // Clear queue state for current socket too
+          socket.data.isInQueue = false;
+          socket.leave("lobby");
+
           // Notify both players
           socket.emit("lobby:match_found", {
             gameId: game.id,
@@ -106,8 +135,6 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             opponent: { id: userId, username, rating },
             color: opponentColor,
           });
-
-          socket.data.isInQueue = false;
         } else {
           // Add to queue
           matchmakingQueue.add(entry);
@@ -144,8 +171,13 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
             const found = matchmakingQueue.findMatch(updatedEntry);
             if (found) {
               clearInterval(socket.data.matchInterval);
+              socket.data.matchInterval = undefined;
               matchmakingQueue.remove(userId);
               socket.data.isInQueue = false;
+              socket.leave("lobby");
+
+              // Clear queue state for found opponent too
+              await clearQueueSocketState(io, found.userId);
 
               const isWhite2 = Math.random() < 0.5;
               const game2 = await gameService.createGame({
