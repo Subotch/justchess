@@ -1,22 +1,36 @@
 /**
- * Stockfish Pool — пул worker_threads для серверного AI.
- * Если воркеры недоступны (нет нативного stockfish в PATH),
- * пул помечается как недоступный и getBestMove() немедленно отклоняет промис,
- * что позволяет game.handler использовать fallback на случайный ход.
+ * Stockfish Pool — пул дочерних процессов Stockfish WASM.
+ *
+ * stockfish@18 — это WASM/Emscripten пакет. Его нельзя загрузить
+ * через require() внутри worker_threads (проблема пути WASM), а
+ * Module.print не перехватывается при загрузке через require() в том же процессе.
+ *
+ * РЕШЕНИЕ: запускаем каждый экземпляр движка как отдельный дочерний процесс
+ * через child_process.spawn и общаемся с ним через stdin/stdout (UCI протокол).
  *
  * Инициализируется через initStockfishPool() в server.js.
  * Публичный API: getBestMove(fen, depth, skillLevel) → Promise<string>
  */
 
-import { Worker } from "worker_threads";
+import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import os from "os";
 
-interface PoolSlot {
-  worker: Worker;
+// Путь к single-threaded WASM Stockfish (не требует SharedArrayBuffer)
+const STOCKFISH_JS = path.join(
+  process.cwd(),
+  "node_modules/stockfish/bin/stockfish-18-single.js"
+);
+
+const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2));
+
+interface EngineSlot {
+  proc: ChildProcess;
   busy: boolean;
   id: number;
   healthy: boolean;
+  lineBuffer: string;
+  onLine: ((line: string) => void) | null;
 }
 
 interface PendingRequest {
@@ -27,76 +41,105 @@ interface PendingRequest {
   reject: (err: Error) => void;
 }
 
-const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2));
-// Воркер компилируется в dist/stockfish/stockfish-worker.js во время npm run build.
-// Используем process.cwd() (корень проекта), так как __dirname при tsx указывает на исходник,
-// а не на скомпилированный файл.
-const WORKER_PATH = path.resolve(process.cwd(), "dist/stockfish/stockfish-worker.js");
-
-const pool: PoolSlot[] = [];
+const pool: EngineSlot[] = [];
 const queue: PendingRequest[] = [];
 
 let poolAvailable = false;
 let initAttempted = false;
 
-function createWorker(id: number): PoolSlot {
-  const worker = new Worker(WORKER_PATH);
-  const slot: PoolSlot = { worker, busy: false, id, healthy: true };
+function spawnSlot(id: number): EngineSlot {
+  const proc = spawn(process.execPath, [STOCKFISH_JS], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 
-  worker.on("error", (err) => {
-    // Не спамить в консоль: логируем только первый сбой
+  const slot: EngineSlot = {
+    proc,
+    busy: false,
+    id,
+    healthy: true,
+    lineBuffer: "",
+    onLine: null,
+  };
+
+  proc.stdout!.setEncoding("utf8");
+  proc.stdout!.on("data", (data: string) => {
+    slot.lineBuffer += data;
+    let nl: number;
+    while ((nl = slot.lineBuffer.indexOf("\n")) !== -1) {
+      const line = slot.lineBuffer.slice(0, nl).replace(/\r$/, "");
+      slot.lineBuffer = slot.lineBuffer.slice(nl + 1);
+      if (slot.onLine) {
+        slot.onLine(line);
+      }
+    }
+  });
+
+  proc.stderr!.on("data", () => {
+    // подавляем Emscripten-шум
+  });
+
+  proc.on("error", (err) => {
     if (slot.healthy) {
-      console.warn(`[stockfish-pool] Worker #${id} недоступен: ${err.message}`);
+      console.warn(`[stockfish-pool] Процесс #${id} ошибка: ${err.message}`);
     }
     slot.healthy = false;
     slot.busy = false;
-    // Сбрасываем очередь — всем отказать
     drainQueueWithError();
+    if (pool.every((s) => !s.healthy)) {
+      poolAvailable = false;
+      console.warn("[stockfish-pool] Все слоты недоступны — AI переходит на fallback");
+    }
   });
 
-  worker.on("exit", (code) => {
+  proc.on("exit", (code) => {
     if (code !== 0 && slot.healthy) {
-      console.warn(`[stockfish-pool] Worker #${id} завершился с кодом ${code}`);
+      console.warn(`[stockfish-pool] Процесс #${id} завершился с кодом ${code}`);
       slot.healthy = false;
     }
-    // Не перезапускаем — пусть game.handler использует fallback
   });
+
+  // Инициализируем UCI
+  proc.stdin!.write("uci\n");
+  proc.stdin!.write("isready\n");
 
   return slot;
 }
 
 /**
- * Инициализирует пул воркеров Stockfish.
- * Проверяет, доступен ли скомпилированный воркер.
- * Если нет — молча пропускает, game.handler будет использовать fallback.
+ * Инициализирует пул дочерних процессов Stockfish.
  */
 export function initStockfishPool(): void {
   if (initAttempted) return;
   initAttempted = true;
 
-  console.log(`[stockfish-pool] Инициализация. WORKER_PATH=${WORKER_PATH}, cwd=${process.cwd()}`);
-
-  // Проверяем что файл воркера существует
+  // Проверяем что файл движка существует
   const fs = require("fs");
-  if (!fs.existsSync(WORKER_PATH)) {
+  if (!fs.existsSync(STOCKFISH_JS)) {
     console.warn(
-      `[stockfish-pool] Воркер не найден (${WORKER_PATH}). ` +
+      `[stockfish-pool] Файл движка не найден: ${STOCKFISH_JS}. ` +
       `AI будет использовать случайные ходы. ` +
-      `Убедитесь что 'npm run build:worker' выполняется при сборке.`
+      `Убедитесь что пакет 'stockfish' установлен (npm install).`
     );
     return;
   }
 
-  console.log(`[stockfish-pool] Файл воркера найден, создаём пул из ${POOL_SIZE} воркеров...`);
+  console.log(`[stockfish-pool] Запуск ${POOL_SIZE} дочерних процессов Stockfish...`);
 
-  try {
-    for (let i = 0; i < POOL_SIZE; i++) {
-      pool.push(createWorker(i));
+  for (let i = 0; i < POOL_SIZE; i++) {
+    try {
+      const slot = spawnSlot(i);
+      pool.push(slot);
+      poolAvailable = true;
+      console.log(`[stockfish-pool] Процесс #${i} запущен`);
+    } catch (err: unknown) {
+      console.warn(`[stockfish-pool] Не удалось запустить процесс #${i}:`, (err as Error)?.message ?? err);
     }
-    poolAvailable = true;
-    console.log(`[stockfish-pool] Инициализирован пул из ${POOL_SIZE} воркеров`);
-  } catch (err) {
-    console.warn("[stockfish-pool] Не удалось создать воркеры, AI использует случайные ходы:", err);
+  }
+
+  if (pool.length === 0) {
+    console.warn("[stockfish-pool] Ни один процесс не запущен. AI использует случайные ходы.");
+  } else {
+    console.log(`[stockfish-pool] Пул готов: ${pool.length}/${POOL_SIZE} процессов`);
   }
 }
 
@@ -117,7 +160,7 @@ export function getBestMove(
     const slot = pool.find((s) => !s.busy && s.healthy);
 
     if (!slot) {
-      // Все воркеры заняты — ставим в очередь
+      // Все слоты заняты — ставим в очередь
       queue.push({ fen, depth, skillLevel, resolve, reject });
       return;
     }
@@ -126,8 +169,12 @@ export function getBestMove(
   });
 }
 
+function send(slot: EngineSlot, cmd: string): void {
+  slot.proc.stdin!.write(cmd + "\n");
+}
+
 function executeOnSlot(
-  slot: PoolSlot,
+  slot: EngineSlot,
   fen: string,
   depth: number,
   skillLevel: number,
@@ -138,27 +185,46 @@ function executeOnSlot(
 
   // Таймаут: 30 сек для глубоких поисков (depth 20+), 10 сек для остальных
   const timeoutMs = depth >= 20 ? 30_000 : 10_000;
+  let finished = false;
+
   const timeout = setTimeout(() => {
+    if (finished) return;
+    finished = true;
+    slot.onLine = null;
     slot.busy = false;
-    reject(new Error(`[stockfish-pool] Worker #${slot.id} timeout`));
+    try { send(slot, "stop"); } catch {}
+    reject(new Error(`[stockfish-pool] Slot #${slot.id} timeout`));
     drainQueue();
   }, timeoutMs);
 
-  const messageHandler = ({ type, move, error }: { type: string; move?: string; error?: string }) => {
+  slot.onLine = (line: string) => {
+    if (!line.startsWith("bestmove")) return;
+    if (finished) return;
+    finished = true;
     clearTimeout(timeout);
+    slot.onLine = null;
     slot.busy = false;
 
-    if (type === "bestmove" && move) {
+    const parts = line.split(" ");
+    const move = parts[1];
+    if (move && move !== "(none)") {
       resolve(move);
     } else {
-      reject(new Error(error ?? "Stockfish не вернул ход"));
+      reject(new Error("Stockfish вернул bestmove (none)"));
     }
-
     drainQueue();
   };
 
-  slot.worker.once("message", messageHandler);
-  slot.worker.postMessage({ fen, depth, skillLevel });
+  send(slot, "ucinewgame");
+  if (skillLevel < 20) {
+    send(slot, "setoption name UCI_LimitStrength value true");
+    send(slot, `setoption name Skill Level value ${skillLevel}`);
+  } else {
+    send(slot, "setoption name UCI_LimitStrength value false");
+    send(slot, "setoption name Skill Level value 20");
+  }
+  send(slot, `position fen ${fen}`);
+  send(slot, `go depth ${depth}`);
 }
 
 function drainQueue(): void {
@@ -175,17 +241,21 @@ function drainQueue(): void {
 function drainQueueWithError(): void {
   while (queue.length > 0) {
     const pending = queue.shift();
-    pending?.reject(new Error("[stockfish-pool] Воркер недоступен"));
+    pending?.reject(new Error("[stockfish-pool] Процесс недоступен"));
   }
 }
 
 /**
- * Завершает все воркеры пула (для graceful shutdown).
+ * Завершает все дочерние процессы пула (для graceful shutdown).
  */
 export async function shutdownStockfishPool(): Promise<void> {
   if (!poolAvailable) return;
-  await Promise.all(pool.map((s) => s.worker.terminate()));
-  pool.length = 0;
   poolAvailable = false;
+  for (const slot of pool) {
+    try {
+      slot.proc.kill();
+    } catch {}
+  }
+  pool.length = 0;
   console.log("[stockfish-pool] Пул завершён");
 }
