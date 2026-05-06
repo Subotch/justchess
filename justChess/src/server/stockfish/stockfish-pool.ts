@@ -74,16 +74,20 @@ export function initStockfishPool(): void {
   if (initAttempted) return;
   initAttempted = true;
 
+  console.log(`[stockfish-pool] Инициализация. WORKER_PATH=${WORKER_PATH}, cwd=${process.cwd()}`);
+
   // Проверяем что файл воркера существует
   const fs = require("fs");
   if (!fs.existsSync(WORKER_PATH)) {
-    console.log(
+    console.warn(
       `[stockfish-pool] Воркер не найден (${WORKER_PATH}). ` +
       `AI будет использовать случайные ходы. ` +
-      `Для Stockfish AI: скомпилируйте TypeScript серверных файлов.`
+      `Убедитесь что 'npm run build:worker' выполняется при сборке.`
     );
     return;
   }
+
+  console.log(`[stockfish-pool] Файл воркера найден, создаём пул из ${POOL_SIZE} воркеров...`);
 
   try {
     for (let i = 0; i < POOL_SIZE; i++) {
