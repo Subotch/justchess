@@ -22,7 +22,8 @@ const STOCKFISH_JS = path.join(
   "node_modules/stockfish/bin/stockfish-18-single.js"
 );
 
-const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2));
+// const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2)); Если есть ресурсы (деньги) на ОЗУ более 512мб
+const POOL_SIZE = 1
 
 interface EngineSlot {
   proc: ChildProcess;
