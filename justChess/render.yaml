@@ -15,5 +15,7 @@ services:
         sync: false
       - key: BETTER_AUTH_URL
         sync: false
+      - key: BETTER_AUTH_URL
+        sync: false
       - key: NEXT_PUBLIC_APP_URL
         sync: false
