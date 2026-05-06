@@ -22,8 +22,7 @@ const STOCKFISH_JS = path.join(
   "node_modules/stockfish/bin/stockfish-18-single.js"
 );
 
-// const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2)); Если есть ресурсы, можно увеличить пул, но на слабых машинах это может вызвать проблемы с производительностью. 2 слота — безопасный минимум для плавной работы. В будущем можно сделать динамическое масштабирование пула в зависимости от нагрузки и производительности.
-const POOL_SIZE = 2
+const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2));
 
 interface EngineSlot {
   proc: ChildProcess;
