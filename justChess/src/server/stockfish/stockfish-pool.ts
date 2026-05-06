@@ -25,6 +25,9 @@ const STOCKFISH_JS = path.join(
 // const POOL_SIZE = Math.max(2, Math.floor(os.cpus().length / 2)); Если есть ресурсы (деньги) на ОЗУ более 512мб
 const POOL_SIZE = 1
 
+// Время простоя до автоуничтожения процесса (мс). Освобождает ~130 МБ ОЗУ в простое.
+const IDLE_TIMEOUT_MS = 60_000;
+
 interface EngineSlot {
   proc: ChildProcess;
   busy: boolean;
@@ -32,6 +35,8 @@ interface EngineSlot {
   healthy: boolean;
   lineBuffer: string;
   onLine: ((line: string) => void) | null;
+  /** Таймер автоуничтожения при простое. null — процесс занят или уже убит. */
+  idleTimer: ReturnType<typeof setTimeout> | null;
 }
 
 interface PendingRequest {
@@ -48,6 +53,29 @@ const queue: PendingRequest[] = [];
 let poolAvailable = false;
 let initAttempted = false;
 
+/**
+ * Планирует автоуничтожение слота через IDLE_TIMEOUT_MS.
+ * Освобождает ~130 МБ ОЗУ в периоды отсутствия AI-партий.
+ * При следующем запросе getBestMove слот будет пересоздан.
+ */
+function scheduleIdleKill(slot: EngineSlot): void {
+  if (slot.idleTimer !== null) clearTimeout(slot.idleTimer);
+  slot.idleTimer = setTimeout(() => {
+    if (slot.busy) return; // на случай гонки
+    console.log(`[stockfish-pool] Процесс #${slot.id} простаивает ${IDLE_TIMEOUT_MS / 1000}с — завершаем для экономии ОЗУ`);
+    slot.healthy = false;
+    slot.idleTimer = null;
+    try { slot.proc.kill(); } catch {}
+    // Удаляем слот из пула — при следующем запросе будет создан новый
+    const idx = pool.indexOf(slot);
+    if (idx !== -1) pool.splice(idx, 1);
+    if (pool.length === 0) {
+      // Пул пуст, но poolAvailable остаётся true — getBestMove создаст слот по требованию
+      console.log("[stockfish-pool] Пул пуст (idle). Следующий запрос поднимет новый процесс.");
+    }
+  }, IDLE_TIMEOUT_MS);
+}
+
 function spawnSlot(id: number): EngineSlot {
   const proc = spawn(process.execPath, [STOCKFISH_JS], {
     stdio: ["pipe", "pipe", "pipe"],
@@ -60,6 +88,7 @@ function spawnSlot(id: number): EngineSlot {
     healthy: true,
     lineBuffer: "",
     onLine: null,
+    idleTimer: null,
   };
 
   proc.stdout!.setEncoding("utf8");
@@ -108,6 +137,7 @@ function spawnSlot(id: number): EngineSlot {
 
 /**
  * Инициализирует пул дочерних процессов Stockfish.
+ * При POOL_SIZE=1 запускает один процесс и сразу ставит ему idle-таймер.
  */
 export function initStockfishPool(): void {
   if (initAttempted) return;
@@ -131,6 +161,8 @@ export function initStockfishPool(): void {
       const slot = spawnSlot(i);
       pool.push(slot);
       poolAvailable = true;
+      // Сразу ставим idle-таймер — если никто не сыграет с AI за IDLE_TIMEOUT_MS, процесс освободит ОЗУ
+      scheduleIdleKill(slot);
       console.log(`[stockfish-pool] Процесс #${i} запущен`);
     } catch (err: unknown) {
       console.warn(`[stockfish-pool] Не удалось запустить процесс #${i}:`, (err as Error)?.message ?? err);
@@ -153,12 +185,25 @@ export function getBestMove(
   depth: number,
   skillLevel: number
 ): Promise<string> {
-  if (!poolAvailable || pool.length === 0) {
+  if (!poolAvailable) {
     return Promise.reject(new Error("[stockfish-pool] Пул недоступен"));
   }
 
   return new Promise((resolve, reject) => {
-    const slot = pool.find((s) => !s.busy && s.healthy);
+    let slot = pool.find((s) => !s.busy && s.healthy);
+
+    if (!slot && pool.length === 0) {
+      // Пул пуст — процесс был убит по idle-таймеру. Создаём новый на лету.
+      try {
+        const newId = Date.now() % 10000; // условный id для логов
+        console.log(`[stockfish-pool] Пересоздаём процесс Stockfish (on-demand, id=${newId})`);
+        slot = spawnSlot(newId);
+        pool.push(slot);
+      } catch (err: unknown) {
+        reject(new Error(`[stockfish-pool] Не удалось запустить процесс: ${(err as Error)?.message ?? err}`));
+        return;
+      }
+    }
 
     if (!slot) {
       // Все слоты заняты — ставим в очередь
@@ -183,6 +228,11 @@ function executeOnSlot(
   reject: (err: Error) => void
 ): void {
   slot.busy = true;
+  // Отменяем idle-таймер: процесс занят, убивать нельзя
+  if (slot.idleTimer !== null) {
+    clearTimeout(slot.idleTimer);
+    slot.idleTimer = null;
+  }
 
   // Таймаут: 30 сек для глубоких поисков (depth 20+), 10 сек для остальных
   const timeoutMs = depth >= 20 ? 30_000 : 10_000;
@@ -195,6 +245,8 @@ function executeOnSlot(
     slot.busy = false;
     try { send(slot, "stop"); } catch {}
     reject(new Error(`[stockfish-pool] Slot #${slot.id} timeout`));
+    // После освобождения слота — планируем idle-kill
+    scheduleIdleKill(slot);
     drainQueue();
   }, timeoutMs);
 
@@ -213,6 +265,8 @@ function executeOnSlot(
     } else {
       reject(new Error("Stockfish вернул bestmove (none)"));
     }
+    // После освобождения слота — планируем idle-kill
+    scheduleIdleKill(slot);
     drainQueue();
   };
 
@@ -253,6 +307,11 @@ export async function shutdownStockfishPool(): Promise<void> {
   if (!poolAvailable) return;
   poolAvailable = false;
   for (const slot of pool) {
+    // Отменяем idle-таймер перед принудительным завершением
+    if (slot.idleTimer !== null) {
+      clearTimeout(slot.idleTimer);
+      slot.idleTimer = null;
+    }
     try {
       slot.proc.kill();
     } catch {}
