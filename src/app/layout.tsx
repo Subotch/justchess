@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+// import { Inter } from "next/font/google"; // Закомментировано — вызывает таймаут при сборке на Amvera
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { NotificationContainer } from "@/components/ui/notification-container";
@@ -8,7 +8,7 @@ import { HomeButton } from "@/components/ui/home-button";
 import { SettingsPanel } from "@/components/ui/settings-panel";
 import { AuthLoadingOverlay } from "@/components/ui/auth-loading-overlay";
 
-const inter = Inter({ subsets: ["latin"] });
+// const inter = Inter({ subsets: ["latin"] }); // Закомментировано — используется системный шрифт
 
 export const metadata: Metadata = {
   title: "Just Chess — Play Chess Online",
@@ -29,7 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className="font-sans antialiased"> {/* inter.className заменён на системный шрифт */}
         <Providers>
           <div className="fixed top-4 left-4 z-50 flex flex-col gap-3 sm:flex-row">
             <HomeButton />

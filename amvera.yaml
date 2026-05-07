@@ -5,7 +5,7 @@ meta:
     version: "20"
 build:
   skip: false
-  additionalCommands: npm run build
+  # additionalCommands: npm run build // Закомментировано — сборка происходит автоматически, дублирование вызывает таймаут
   artifacts:
     "*": /
 run:
