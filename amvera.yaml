@@ -6,7 +6,6 @@ meta:
 build:
   skip: false
   workingDirectory: justChess
-  # npm install выполняется автоматически; здесь добавляем сборку Next.js и TypeScript-воркера
   additionalCommands: npm run build
   artifacts:
     "*": /
