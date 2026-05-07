@@ -19,12 +19,19 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = parseInt(process.env.PORT || "3000", 10);
 
+console.log(`[server] Starting in ${dev ? "development" : "production"} mode on ${hostname}:${port}`);
+
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(async () => {
   // Инициализируем пул Stockfish worker_threads
-  initStockfishPool();
+  try {
+    initStockfishPool();
+  } catch (err) {
+    console.warn("[server] Failed to initialize Stockfish pool:", err.message);
+  }
+  
   const httpServer = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
@@ -32,7 +39,7 @@ app.prepare().then(async () => {
     } catch (err) {
       console.error("Error occurred handling", req.url, err);
       res.statusCode = 500;
-      res.end("internal server error");
+      res.end("Internal Server Error");
     }
   });
 
@@ -48,6 +55,8 @@ app.prepare().then(async () => {
     // Ping timeout/interval for connection health
     pingTimeout: 60000,
     pingInterval: 25000,
+    // Memory optimization
+    maxHttpBufferSize: 1e6,
   });
 
   // Register all Socket.IO event handlers
@@ -57,18 +66,23 @@ app.prepare().then(async () => {
   setIO(io);
 
   process.on("SIGTERM", async () => {
+    console.log("[server] SIGTERM received, shutting down gracefully...");
     await shutdownStockfishPool();
-    process.exit(0);
+    httpServer.close(() => {
+      console.log("[server] Server closed");
+      process.exit(0);
+    });
   });
 
   httpServer
-    .once("error", (err) => {
-      console.error(err);
+    .on("error", (err) => {
+      console.error("[server] Server error:", err);
       process.exit(1);
     })
-    .listen(port, () => {
+    .listen(port, hostname, () => {
       console.log(
         `> Ready on http://${hostname}:${port} [${dev ? "development" : "production"}]`
       );
+      console.log(`> Hostname: ${hostname}, Port: ${port}`);
     });
 });
