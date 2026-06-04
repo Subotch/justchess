@@ -6,7 +6,7 @@ meta:
 build:
   skip: false
   additionalCommands: |
-    NODE_OPTIONS="--max-old-space-size=2048" npm run build
+    NODE_OPTIONS="--max-old-space-size=2048" npx tsx scripts/build-with-env.ts
   artifacts:
     "*": /
 run:
