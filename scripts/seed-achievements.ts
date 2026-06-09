@@ -12,8 +12,8 @@ import { resolve } from "path";
 config({ path: resolve(process.cwd(), ".env.local") });
 config({ path: resolve(process.cwd(), ".env") });
 
-import { drizzle } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { achievements } from "../src/db/schema";
 
 if (!process.env.DATABASE_URL) {
@@ -21,7 +21,7 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const sql = neon(process.env.DATABASE_URL);
+const sql = postgres(process.env.DATABASE_URL, { max: 5 });
 const db = drizzle(sql);
 
 const NEW_ACHIEVEMENTS = [

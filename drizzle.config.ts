@@ -8,7 +8,11 @@ export default {
   out: "./drizzle/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    host: "127.0.0.1",
+    port: 5432,
+    user: "justchess",
+    password: "justchess_secret_pass",
+    database: "justchess",
   },
   verbose: true,
   strict: true,

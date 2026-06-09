@@ -365,7 +365,7 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
         // Determine if 'friendly' enum value is available in DB; fall back to 'casual'
         let resolvedGameType: "friendly" | "casual" = "friendly";
         try {
-          const result = await db.execute(sqlRaw`SELECT enumlabel FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'game_type' AND e.enumlabel = 'friendly'`);
+          const result = await db.execute(sqlRaw`SELECT enumlabel FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid WHERE t.typname = 'game_type' AND e.enumlabel = 'friendly'`) as unknown as { rows: { enumlabel: string }[] };
           if (!result.rows || result.rows.length === 0) {
             logger.warn("[lobby:accept_challenge] 'friendly' enum not in DB, falling back to 'casual'. Run: npm run db:migrate");
             resolvedGameType = "casual";

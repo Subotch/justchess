@@ -6,27 +6,29 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock db ────────────────────────────────────────────────────────────────
-const mockFindFirst = vi.fn();
-const mockFindMany = vi.fn();
-const mockInsert = vi.fn();
-const mockValues = vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) });
-mockInsert.mockReturnValue({ values: mockValues });
+vi.mock("@/db", () => {
+  const mockFindFirst = vi.fn();
+  const mockFindMany = vi.fn();
+  const mockInsert = vi.fn();
+  const mockValues = vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([]) });
+  mockInsert.mockReturnValue({ values: mockValues });
 
-vi.mock("@/db", () => ({
-  db: {
-    query: {
-      achievements: { findMany: vi.fn() },
-      userAchievements: { findMany: vi.fn() },
-      userStats: { findFirst: mockFindFirst },
-      games: { findFirst: vi.fn() },
-      gameMoves: { findMany: mockFindMany },
+  return {
+    db: {
+      query: {
+        achievements: { findMany: vi.fn() },
+        userAchievements: { findMany: vi.fn() },
+        userStats: { findFirst: mockFindFirst },
+        games: { findFirst: vi.fn() },
+        gameMoves: { findMany: mockFindMany },
+      },
+      insert: mockInsert,
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
     },
-    insert: mockInsert,
-    select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) }),
-  },
-}));
+    _mocks: { mockFindFirst, mockFindMany, mockInsert },
+  };
+});
 
-import { db } from "@/db";
 import { achievementService } from "@/services/achievement.service";
 
 const mockDb = db as any;

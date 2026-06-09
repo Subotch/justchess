@@ -10,7 +10,7 @@ import {
   getKingSquare,
   formatTime,
   formatTimePrecise,
-} from "../chess-engine";
+} from "../../../src/lib/chess-engine";
 
 const INITIAL_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -27,7 +27,6 @@ describe("getCapturedPieces", () => {
   });
 
   it("при отсутствии пешки на доске — она в захваченных", () => {
-    // Позиция без одной чёрной пешки (e5 убрана вручную — упрощённо)
     const fen = "rnbqkbnr/pppp1ppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
     const captured = getCapturedPieces(fen, "white");
     expect(captured["p"]).toBe(1);

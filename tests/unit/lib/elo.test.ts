@@ -3,7 +3,7 @@ import {
   getKFactor,
   expectedScore,
   calculateNewRatings,
-} from "../elo";
+} from "../../../src/lib/elo";
 
 describe("getKFactor", () => {
   it("возвращает 40 для нового игрока (< 30 партий)", () => {
