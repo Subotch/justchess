@@ -422,9 +422,9 @@ export const achievementService = {
   ): Promise<boolean> {
     const { userId, game, stats } = ctx;
 
-    // Pre-computed non-AI aggregates
-    const nonAiWins = Math.max(0, (stats.gamesWon || 0) - (stats.aiGamesWon || 0));
-    const nonAiGamesPlayed = Math.max(0, (stats.gamesPlayed || 0) - (stats.aiGamesPlayed || 0));
+    // Pre-computed aggregates — include ALL wins (PvP and AI)
+    const nonAiWins = stats.gamesWon || 0;
+    const nonAiGamesPlayed = stats.gamesPlayed || 0;
 
     // Helper: did the user win this specific game?
     const userWon =
