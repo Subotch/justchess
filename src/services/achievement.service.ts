@@ -11,6 +11,7 @@ import {
   games,
   gameMoves,
   playerGameStats,
+  friendships,
 } from "@/db/schema";
 
 // ─────────────────────────────────────────────
@@ -443,8 +444,12 @@ export const achievementService = {
     switch (criteria.type) {
       // ── Simple stat checks (no DB) ─────────────────────────────────────
 
-      case "wins":
-        return nonAiWins >= (criteria.count ?? 1);
+      case "wins": {
+        if (nonAiWins < (criteria.count ?? 1)) return false;
+        // Поддержка gameType из seed-скрипта (first_blood)
+        if (criteria.gameType && game.gameType !== criteria.gameType) return false;
+        return true;
+      }
 
       case "win_streak":
         return nonAiWins >= (criteria.count ?? 1);
@@ -471,6 +476,22 @@ export const achievementService = {
 
       case "ai_wins":
         return (stats.aiGamesWon || 0) >= (criteria.count ?? 1);
+
+      case "friends": {
+        const [row] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(friendships)
+          .where(
+            and(
+              eq(friendships.status, "accepted"),
+              or(
+                eq(friendships.requesterId, userId),
+                eq(friendships.addresseeId, userId)
+              )
+            )
+          );
+        return (row?.count ?? 0) >= (criteria.count ?? 1);
+      }
 
       // ── Current-game checks (uses pre-fetched game row) ────────────────
 
