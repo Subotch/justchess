@@ -17,6 +17,7 @@ import {
 } from "@/db/schema";
 import { calculateNewRatings } from "@/lib/elo";
 import { achievementService } from "./achievement.service";
+import { AI_DIFFICULTY_LEVELS } from "@/types/game";
 import type {
   GameResult,
   GameResultReason,
@@ -95,7 +96,7 @@ export const gameService = {
     const timingCategory = getTimingCategory(timeControlMinutes);
     const timeMs = timeControlMinutes * 60 * 1000;
 
-    // Fetch ratings for snapshot
+// Fetch ratings for snapshot
     let whiteRating = 1200;
     let blackRating = 1200;
 
@@ -108,7 +109,11 @@ export const gameService = {
       }
     }
 
-    if (blackPlayerId) {
+    if (isAiGame && aiDifficulty) {
+      // AI rating is based on difficulty level
+      const aiLevel = AI_DIFFICULTY_LEVELS.find((l) => l.level === aiDifficulty);
+      blackRating = aiLevel?.elo ?? 1200;
+    } else if (blackPlayerId) {
       const bs = await db.query.userStats.findFirst({
         where: eq(userStats.userId, blackPlayerId),
       });
@@ -235,7 +240,7 @@ export const gameService = {
     const uci = `${from}${to}${promotion || ""}`;
     const fen = chess.fen();
     const pgn = chess.pgn();
-    const moveNumber = Math.ceil(existingMoves.length / 2) + 1;
+    const moveNumber = Math.ceil((existingMoves.length + 1) / 2);
 
     // 6. Persist the move
     await db.insert(gameMoves).values({

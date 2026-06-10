@@ -4,7 +4,7 @@
  * ChessBoard component — wraps react-chessboard with game logic
  */
 
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { Chessboard } from "react-chessboard";
 import { Chess } from "chess.js";
 import { useGameStore } from "@/stores/game-store";
@@ -27,6 +27,7 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
   const [promotionMove, setPromotionMove] = useState<{ from: string; to: string } | null>(null);
   // Guard against duplicate move submissions from mobile touch events
   const isSubmittingMove = useRef(false);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   const fen = fenOverride ?? game?.fen ?? "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
   const isFlipped = myColor === "black";
@@ -167,33 +168,42 @@ export function ChessBoard({ gameId, readOnly = false, fen: fenOverride, onMove 
     setPromotionSquare(null);
   };
 
+  // Auto-focus the board after each move so keyboard input always goes to the board
+  useEffect(() => {
+    if (!readOnly && boardRef.current) {
+      boardRef.current.focus();
+    }
+  }, [game?.fen, readOnly]);
+
   return (
     <div className="relative w-full aspect-square">
-      <Chessboard
-        id={`board-${gameId}`}
-        position={fen}
-        onSquareClick={handleSquareClick}
-        onPieceDrop={handlePieceDrop}
-        boardOrientation={isFlipped ? "black" : "white"}
-        customSquareStyles={customSquareStyles}
-        arePiecesDraggable={isMyTurn && !readOnly}
-        animationDuration={preferences.animationSpeed === "fast" ? 100 : preferences.animationSpeed === "slow" ? 400 : 200}
-        showBoardNotation={preferences.showCoordinates}
-        customBoardStyle={{
-          borderRadius: "4px",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-        }}
-      />
+      <div ref={boardRef} tabIndex={-1} className="w-full h-full outline-none" onKeyDown={() => {}}>
+        <Chessboard
+          id={`board-${gameId}`}
+          position={fen}
+          onSquareClick={handleSquareClick}
+          onPieceDrop={handlePieceDrop}
+          boardOrientation={isFlipped ? "black" : "white"}
+          customSquareStyles={customSquareStyles}
+          arePiecesDraggable={isMyTurn && !readOnly}
+          animationDuration={preferences.animationSpeed === "fast" ? 100 : preferences.animationSpeed === "slow" ? 400 : 200}
+          showBoardNotation={preferences.showCoordinates}
+          customBoardStyle={{
+            borderRadius: "4px",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+          }}
+        />
+      </div>
 
       {/* Promotion dialog */}
       {promotionSquare && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 rounded">
-          <div className="bg-slate-800 rounded-xl p-4 flex gap-3">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 flex gap-3 shadow-xl">
             {(["q", "r", "b", "n"] as const).map((piece) => (
               <button
                 key={piece}
                 onClick={() => handlePromotion(piece)}
-                className="w-16 h-16 bg-slate-700 hover:bg-slate-600 rounded-lg text-3xl flex items-center justify-center transition-colors"
+                className="w-16 h-16 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-3xl flex items-center justify-center transition-colors text-slate-800 dark:text-white"
               >
                 {piece === "q" ? "♛" : piece === "r" ? "♜" : piece === "b" ? "♝" : "♞"}
               </button>

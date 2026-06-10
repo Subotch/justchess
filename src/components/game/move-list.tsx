@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * MoveList — scrollable list of moves in algebraic notation
+ * MoveList — Lichess-style move list
+ * Clean, compact, table-like layout with auto-scroll to current move.
  */
 
 import { useRef, useEffect } from "react";
+import { useTranslation } from "@/lib/i18n";
 import type { ChessMove } from "@/types/game";
 
 interface MoveListProps {
@@ -15,15 +17,8 @@ interface MoveListProps {
 
 export function MoveList({ moves, currentMoveIndex, onMoveClick }: MoveListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to latest move — scroll only inside the container
-  useEffect(() => {
-    if (currentMoveIndex === undefined && containerRef.current && bottomRef.current) {
-      const container = containerRef.current;
-      container.scrollTop = container.scrollHeight;
-    }
-  }, [moves.length, currentMoveIndex]);
+  const currentRef = useRef<HTMLButtonElement | null>(null);
+  const { t } = useTranslation();
 
   // Group moves into pairs (white + black)
   const movePairs: Array<{ number: number; white?: ChessMove; black?: ChessMove }> = [];
@@ -35,60 +30,84 @@ export function MoveList({ moves, currentMoveIndex, onMoveClick }: MoveListProps
     });
   }
 
+  // Scroll the highlighted move into view
+  useEffect(() => {
+    if (currentMoveIndex !== undefined && currentRef.current) {
+      currentRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [currentMoveIndex]);
+
   if (moves.length === 0) {
     return (
-      <div className="bg-slate-800 rounded-xl p-4 text-center text-slate-500 text-sm">
-        No moves yet
+      <div className="bg-slate-100 dark:bg-slate-800 rounded-xl px-4 py-3 text-center text-slate-400 dark:text-slate-500 text-xs" suppressHydrationWarning>
+        {t('game.noMoves')}
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="bg-slate-800 rounded-xl p-3 max-h-80 overflow-y-auto">
-      <div className="space-y-0.5">
-        {movePairs.map((pair) => {
-          const whiteIdx = (pair.number - 1) * 2;
-          const blackIdx = whiteIdx + 1;
+    <div
+      ref={containerRef}
+      className="bg-slate-50 dark:bg-slate-800 rounded-xl overflow-y-auto"
+      style={{ maxHeight: "320px" }}
+    >
+      <table className="w-full text-sm">
+        <tbody>
+          {movePairs.map((pair) => {
+            const whiteIdx = (pair.number - 1) * 2;
+            const blackIdx = whiteIdx + 1;
+            const isWhiteActive = currentMoveIndex === whiteIdx;
+            const isBlackActive = currentMoveIndex === blackIdx;
 
-          return (
-            <div key={pair.number} className="flex items-center gap-1 text-sm">
-              {/* Move number */}
-              <span className="text-slate-500 w-7 text-right flex-shrink-0">
-                {pair.number}.
-              </span>
+            return (
+              <tr key={pair.number} className="group">
+                {/* Move number */}
+                <td className="w-8 text-slate-500 text-xs text-right pr-2 py-px align-top">
+                  {pair.number}.
+                </td>
 
-              {/* White move */}
-              <button
-                onClick={() => onMoveClick?.(whiteIdx)}
-                className={`flex-1 text-left px-2 py-0.5 rounded transition-colors ${
-                  currentMoveIndex === whiteIdx
-                    ? "bg-slate-600 text-white"
-                    : "text-slate-300 hover:bg-slate-700"
-                }`}
-              >
-                {pair.white?.san ?? ""}
-              </button>
+                {/* White move */}
+                <td className="py-px">
+                  {pair.white ? (
+                    <button
+                      ref={isWhiteActive ? currentRef : undefined}
+                      onClick={() => onMoveClick?.(whiteIdx)}
+className={`w-full text-left px-2 py-0.5 text-xs rounded-sm transition-colors ${
+                        isWhiteActive
+                          ? "bg-green-600 text-white font-semibold"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      {pair.white.san}
+                    </button>
+                  ) : (
+                    <div className="px-2 py-0.5 text-xs text-slate-600">&nbsp;</div>
+                  )}
+                </td>
 
-              {/* Black move */}
-              {pair.black ? (
-                <button
-                  onClick={() => onMoveClick?.(blackIdx)}
-                  className={`flex-1 text-left px-2 py-0.5 rounded transition-colors ${
-                    currentMoveIndex === blackIdx
-                      ? "bg-slate-600 text-white"
-                      : "text-slate-300 hover:bg-slate-700"
-                  }`}
-                >
-                  {pair.black.san}
-                </button>
-              ) : (
-                <div className="flex-1" />
-              )}
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
+                {/* Black move */}
+                <td className="py-px">
+                  {pair.black ? (
+                    <button
+                      ref={isBlackActive ? currentRef : undefined}
+                      onClick={() => onMoveClick?.(blackIdx)}
+className={`w-full text-left px-2 py-0.5 text-xs rounded-sm transition-colors ${
+                        isBlackActive
+                          ? "bg-green-600 text-white font-semibold"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      {pair.black.san}
+                    </button>
+                  ) : (
+                    <div className="px-2 py-0.5 text-xs text-slate-600">&nbsp;</div>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

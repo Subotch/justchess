@@ -62,7 +62,7 @@ export function ReviewBoard({ gameId, pgn }: ReviewBoardProps) {
   }));
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white">
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center gap-4 mb-6">
           <button
@@ -93,44 +93,44 @@ export function ReviewBoard({ gameId, pgn }: ReviewBoardProps) {
               <button
                 onClick={() => setCurrentIndex(-1)}
                 disabled={currentIndex === -1}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors"
+                className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors text-slate-700 dark:text-white"
               >
-                ⏮
+                <span suppressHydrationWarning>{t('game.goToStart')}</span>
               </button>
               <button
                 onClick={() => setCurrentIndex((i) => Math.max(-1, i - 1))}
                 disabled={currentIndex === -1}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors"
+                className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors text-slate-700 dark:text-white"
               >
                 ◀
               </button>
               <span
-                className="text-slate-400 text-sm min-w-[80px] text-center"
+                className="text-slate-400 text-sm min-w-[100px] text-center"
                 suppressHydrationWarning
               >
                 {currentIndex === -1
-                  ? t("game.waitingForOpponent")
-                  : `${t("common.next")} ${currentIndex + 1} / ${positions.length}`}
+                  ? t("game.startingPosition")
+                  : `${t("game.moveOf", { current: currentIndex + 1, total: positions.length })}`}
               </span>
               <button
                 onClick={() =>
                   setCurrentIndex((i) => Math.min(positions.length - 1, i + 1))
                 }
                 disabled={currentIndex === positions.length - 1}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors"
+                className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors text-slate-700 dark:text-white"
               >
                 ▶
               </button>
               <button
                 onClick={() => setCurrentIndex(positions.length - 1)}
                 disabled={currentIndex === positions.length - 1}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors"
+                className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-40 rounded-lg text-sm transition-colors text-slate-700 dark:text-white"
               >
-                ⏭
+                <span suppressHydrationWarning>{t('game.goToEnd')}</span>
               </button>
             </div>
-            <p className="text-center text-slate-500 text-xs mt-2">
-              Use ← → arrow keys to navigate
+            <p className="text-center text-slate-500 text-xs mt-2" suppressHydrationWarning>
+              {t("game.arrowKeysHint")}
             </p>
           </div>
 

@@ -62,7 +62,7 @@ export default function PlayAiPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-8">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white p-8">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <button
@@ -75,8 +75,8 @@ export default function PlayAiPage() {
         </div>
 
         {/* Difficulty selector */}
-        <div className="bg-slate-800 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4" suppressHydrationWarning>{t('play.difficulty')} (Placeholder)</h2>
+<div className="bg-white dark:bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white" suppressHydrationWarning>{t('play.difficulty')} (Placeholder)</h2>
 
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
@@ -95,9 +95,9 @@ export default function PlayAiPage() {
               onChange={(e) => setDifficulty(parseInt(e.target.value))}
               className="w-full accent-green-500"
             />
-            <div className="flex justify-between text-xs text-slate-500 mt-1">
-              <span>Beginner</span>
-              <span>Maximum</span>
+<div className="flex justify-between text-xs text-slate-500 mt-1">
+              <span suppressHydrationWarning>{t('play.beginner')}</span>
+              <span suppressHydrationWarning>{t('play.maximum')}</span>
             </div>
           </div>
 
@@ -110,7 +110,7 @@ export default function PlayAiPage() {
                 className={`py-2 rounded-lg text-sm font-medium transition-colors ${
                   difficulty === lvl
                     ? "bg-green-500 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600"
                 }`}
               >
                 {lvl}
@@ -120,8 +120,8 @@ export default function PlayAiPage() {
         </div>
 
         {/* Color selection */}
-        <div className="bg-slate-800 rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-4" suppressHydrationWarning>{t('play.playAs')} (Placeholder)</h2>
+<div className="bg-white dark:bg-slate-800 rounded-xl p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-4 text-slate-900 dark:text-white" suppressHydrationWarning>{t('play.playAs')} (Placeholder)</h2>
           <div className="flex gap-3">
             {(["white", "random", "black"] as const).map((c) => (
               <button
@@ -130,7 +130,7 @@ export default function PlayAiPage() {
                 className={`flex-1 py-3 rounded-lg font-medium capitalize transition-colors ${
                   color === c
                     ? "bg-green-500 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600"
                 }`}
               >
                 {c === "white" ? "♔ White" : c === "black" ? "♚ Black" : "🎲 Random"}
@@ -140,7 +140,7 @@ export default function PlayAiPage() {
         </div>
 
         {/* Time control */}
-        <div className="bg-slate-800 rounded-xl p-6 mb-8">
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-6 mb-8">
           <h2 className="text-lg font-semibold mb-4" suppressHydrationWarning>{t('play.timeControl')}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {TIME_CONTROLS.map((tc) => (
@@ -150,7 +150,7 @@ export default function PlayAiPage() {
                 className={`py-3 rounded-lg text-sm font-medium transition-colors ${
                   timeControl.label === tc.label
                     ? "bg-green-500 text-white"
-                    : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600"
                 }`}
               >
                 {tc.label}
@@ -164,7 +164,7 @@ export default function PlayAiPage() {
           disabled={loading}
           className="w-full py-4 bg-green-500 hover:bg-green-400 disabled:bg-green-800 disabled:cursor-not-allowed rounded-xl font-bold text-lg transition-colors"
         >
-          <span suppressHydrationWarning>{loading ? t('common.loading') : `Play vs ${selectedLevel.name}`}</span>
+          <span suppressHydrationWarning>{loading ? t('common.loading') : t('play.playVsLevel', { level: selectedLevel.name })}</span>
         </button>
       </div>
     </div>

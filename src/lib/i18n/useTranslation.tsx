@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { translations } from './translations';
 import type { Locale } from './translations';
 
@@ -39,17 +39,62 @@ function interpolate(template: string, params?: Record<string, string | number>)
   });
 }
 
-export function I18nProvider({ children, defaultLocale = 'en' }: { children: React.ReactNode; defaultLocale?: Locale }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window === 'undefined') return defaultLocale;
-    const saved = localStorage.getItem('locale') as Locale | null;
-    return saved || defaultLocale;
-  });
+/**
+ * Detect browser language preference.
+ * Returns 'ru' if any ru-* locale is preferred, otherwise 'en'.
+ */
+function detectBrowserLocale(): Locale {
+  if (typeof navigator === 'undefined') return 'ru';
+  
+  const browserLang = navigator.language || (navigator as any).userLanguage || '';
+  
+  // Check for Russian language
+  if (browserLang.toLowerCase().startsWith('ru')) {
+    return 'ru';
+  }
+  
+  // Check Accept-Language header for Russian preference
+  const langs = (navigator as any).languages as string[] | undefined;
+  if (langs && Array.isArray(langs)) {
+    for (const lang of langs) {
+      if (lang.toLowerCase().startsWith('ru')) {
+        return 'ru';
+      }
+    }
+  }
+  
+  return 'en';
+}
+
+export function I18nProvider({ children, defaultLocale = 'ru' }: { children: React.ReactNode; defaultLocale?: Locale }) {
+  // SSR-safe initial state: always render with defaultLocale on the server
+  // to ensure consistent hydration. Client useEffect will update after mount.
+  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+    
+    // Priority: localStorage > browser language > default
+    const saved = localStorage.getItem('locale') as Locale | null;
+    
+    if (saved && (saved === 'en' || saved === 'ru')) {
+      // User already chose a language — use it
+      setLocaleState(saved);
+    } else {
+      // No saved preference — detect browser language
+      const browserLocale = detectBrowserLocale();
+      setLocaleState(browserLocale);
+    }
+  }, [defaultLocale]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
+    // Persist to localStorage whenever locale changes (after mount)
     localStorage.setItem('locale', locale);
     document.documentElement.lang = locale;
-  }, [locale]);
+  }, [locale, mounted]);
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
@@ -70,8 +115,10 @@ export function I18nProvider({ children, defaultLocale = 'en' }: { children: Rea
     return interpolate(typeof value === 'string' ? value : key, params);
   }, [locale]);
 
+  const value = useMemo(() => ({ locale, setLocale, t }), [locale, setLocale, t]);
+
   return (
-    <I18nContext.Provider value={{ locale, setLocale, t }}>
+    <I18nContext.Provider value={value}>
       {children}
     </I18nContext.Provider>
   );

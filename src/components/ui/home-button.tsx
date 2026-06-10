@@ -3,20 +3,25 @@
 import Link from "next/link";
 import { Home } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+import { useLobbyStore } from "@/stores/lobby-store";
 
 export function HomeButton() {
   const { t } = useTranslation();
+  const isInQueue = useLobbyStore((s) => s.queue.isInQueue);
 
   return (
     <Link
       href="/"
       suppressHydrationWarning
-      className="flex items-center justify-center rounded-full border border-slate-700 bg-slate-800/95 px-4 py-3 text-sm font-medium text-white shadow-lg transition-colors hover:bg-slate-700 dark:border-slate-600 dark:bg-slate-700/95 dark:hover:bg-slate-600"
+      onClick={isInQueue ? (e) => e.preventDefault() : undefined}
+      aria-disabled={isInQueue}
+      tabIndex={isInQueue ? -1 : 0}
+      className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 dark:text-white transition-colors hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-green-600 dark:hover:text-green-400 ${isInQueue ? "opacity-50 cursor-not-allowed pointer-events-none" : ""}`}
       aria-label={t('nav.home')}
       title={t('nav.home')}
     >
-      <Home className="h-5 w-5 sm:mr-2" />
-      <span className="hidden sm:inline" suppressHydrationWarning>JUSTCHESS</span>
+      <Home className="h-5 w-5 flex-shrink-0" />
+      <span className="hidden xs:inline font-bold tracking-wide">JUSTCHESS</span>
     </Link>
   );
 }

@@ -132,7 +132,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 px-4 py-10 text-white">
+    <main className="min-h-screen bg-slate-100 dark:bg-slate-800 px-4 py-10 text-slate-900 dark:text-white">
       <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -141,14 +141,14 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
           </h1>
           <Link
             href={`/profile/${userId}`}
-            className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+            className="rounded-lg bg-slate-200 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-300 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
           >
             <span suppressHydrationWarning>{t("gamesHistory.backToProfile")}</span>
           </Link>
         </div>
 
         {/* Filters */}
-        <div className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
+<div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             {/* Opponent search */}
             <div className="xl:col-span-2">
@@ -157,7 +157,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
                 value={opponentQuery}
                 onChange={(e) => setOpponentQuery(e.target.value)}
                 placeholder={t("gamesHistory.searchOpponent")}
-                className="w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-green-500 focus:outline-none"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-green-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-500"
               />
             </div>
 
@@ -165,7 +165,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
             <select
               value={gameType}
               onChange={(e) => setGameType(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-green-500 focus:outline-none"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-green-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             >
               <option value="" suppressHydrationWarning>{t("gamesHistory.allTypes")}</option>
               <option value="rated" suppressHydrationWarning>{t("profile.gameTypeRated")}</option>
@@ -178,7 +178,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
             <select
               value={timingCategory}
               onChange={(e) => setTimingCategory(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-green-500 focus:outline-none"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-green-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             >
               <option value="" suppressHydrationWarning>{t("gamesHistory.allTimings")}</option>
               <option value="bullet">Bullet</option>
@@ -191,7 +191,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-green-500 focus:outline-none"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-green-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             >
               <option value="endedAt" suppressHydrationWarning>{t("gamesHistory.sortDate")}</option>
               <option value="result" suppressHydrationWarning>{t("gamesHistory.sortResult")}</option>
@@ -201,7 +201,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
             <select
               value={sortDir}
               onChange={(e) => setSortDir(e.target.value)}
-              className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-white focus:border-green-500 focus:outline-none"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-green-500 focus:outline-none dark:border-slate-600 dark:bg-slate-700 dark:text-white"
             >
               <option value="desc" suppressHydrationWarning>{t("gamesHistory.sortDesc")}</option>
               <option value="asc" suppressHydrationWarning>{t("gamesHistory.sortAsc")}</option>
@@ -210,15 +210,15 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
         </div>
 
         {/* Table */}
-        <div className="rounded-2xl border border-slate-700 bg-slate-800 shadow-sm">
+<div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
           {loading ? (
             <LoadingSpinner />
           ) : items.length === 0 ? (
-            <div className="p-8 text-center text-slate-400" suppressHydrationWarning>
+            <div className="p-8 text-center text-slate-500 dark:text-slate-400" suppressHydrationWarning>
               {t("gamesHistory.noGames")}
             </div>
           ) : (
-            <ul className="divide-y divide-slate-700">
+            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
               {items.map((game) => {
                 const { label: resultLabel, color: resultColor } = getResultLabel(game);
                 const opponentName =
@@ -229,7 +229,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
                 return (
                   <li
                     key={game.id}
-                    className="flex items-center justify-between gap-4 px-6 py-4 hover:bg-slate-700/40"
+                    className="flex items-center justify-between gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-slate-700/40"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-4">
                       {/* Result badge */}
@@ -239,7 +239,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
 
                       {/* Opponent */}
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">
+                        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                           {game.opponent && !game.isAiGame ? (
                             <Link
                               href={`/profile/${game.opponent.id}`}
@@ -251,7 +251,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
                             opponentName
                           )}
                         </p>
-                        <p className="mt-0.5 truncate text-xs text-slate-400">
+                        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
                           <span suppressHydrationWarning>{getGameTypeLabel(game.gameType)}</span>
                           {" · "}
                           {game.timingCategory}
@@ -267,7 +267,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
 
                     <Link
                       href={`/game/${game.id}/review`}
-                      className="shrink-0 rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-600"
+                      className="shrink-0 rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
                     >
                       <span suppressHydrationWarning>{t("profile.viewGame")}</span>
                     </Link>
@@ -279,8 +279,8 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-700 px-6 py-4">
-              <p className="text-sm text-slate-400" suppressHydrationWarning>
+            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-700">
+              <p className="text-sm text-slate-500 dark:text-slate-400" suppressHydrationWarning>
                 {t("gamesHistory.page")} {page} {t("gamesHistory.of")} {totalPages} · {total} total
               </p>
               <div className="flex gap-2">
@@ -288,7 +288,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
                   type="button"
                   disabled={page <= 1 || loading}
                   onClick={() => setPage((p) => p - 1)}
-                  className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
                   suppressHydrationWarning
                 >
                   {t("gamesHistory.prev")}
@@ -297,7 +297,7 @@ export default function ProfileGamesPage({ params }: ProfileGamesPageProps) {
                   type="button"
                   disabled={page >= totalPages || loading}
                   onClick={() => setPage((p) => p + 1)}
-                  className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="rounded-lg bg-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
                   suppressHydrationWarning
                 >
                   {t("gamesHistory.next")}

@@ -3,9 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { NotificationContainer } from "@/components/ui/notification-container";
-import { UserMenu } from "@/components/ui/user-menu";
-import { HomeButton } from "@/components/ui/home-button";
-import { SettingsPanel } from "@/components/ui/settings-panel";
+import { TopBar } from "@/components/ui/top-bar";
 import { AuthLoadingOverlay } from "@/components/ui/auth-loading-overlay";
 
 // const inter = Inter({ subsets: ["latin"] }); // Закомментировано — используется системный шрифт
@@ -28,16 +26,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="font-sans antialiased"> {/* inter.className заменён на системный шрифт */}
+    <html lang="ru" suppressHydrationWarning>
+      <body className="font-sans antialiased">
         <Providers>
-          <div className="fixed top-4 left-4 z-50 flex flex-col gap-3 sm:flex-row">
-            <HomeButton />
-            <SettingsPanel />
-          </div>
-          <UserMenu />
+          <TopBar />
           <AuthLoadingOverlay />
-          {children}
+          <main className="pt-16">
+            {children}
+          </main>
           <NotificationContainer />
         </Providers>
       </body>

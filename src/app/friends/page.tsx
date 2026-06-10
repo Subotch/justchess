@@ -10,10 +10,10 @@ import { notify } from "@/stores/notification-store";
 import { useTranslation } from "@/lib/i18n";
 import type { ApiResponse, FriendListItem, UserProfileResponse } from "@/types/api";
 
-function copyToClipboard(text: string) {
+function copyToClipboard(text: string, successTitle: string, successMsg: string) {
   navigator.clipboard.writeText(text).then(
-    () => notify.success("Код скопирован", `Код ${text} скопирован в буфер обмена`),
-    () => notify.error("Ошибка", "Не удалось скопировать код")
+    () => notify.success(successTitle, successMsg),
+    () => notify.error("Error", "Failed to copy code")
   );
 }
 
@@ -221,7 +221,7 @@ export default function FriendsPage() {
   const outgoing = friends.filter((item) => item.status === "pending" && item.direction === "sent");
 
   return (
-    <main className="min-h-screen bg-slate-900 px-4 py-10 text-white">
+    <main className="min-h-screen bg-slate-100 dark:bg-slate-800 px-4 py-10 text-slate-900 dark:text-white">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -454,7 +454,7 @@ function FriendsColumn({
   items: FriendListItem[];
   emptyText: string;
   action: (item: FriendListItem) => React.ReactNode;
-  t: (key: string) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -475,9 +475,13 @@ function FriendsColumn({
                 </Link>
                 <p className="text-sm text-slate-500 dark:text-slate-400">@{item.user.username ?? "unknown"}</p>
                 <button
-                  onClick={() => copyToClipboard(item.user.friendCode)}
+                  onClick={() => copyToClipboard(
+                    item.user.friendCode,
+                    t('friends.codeCopiedTitle'),
+                    t('friends.codeCopiedMessage', { code: item.user.friendCode })
+                  )}
                   className="mt-1 cursor-pointer text-xs tracking-[0.2em] text-green-600 transition hover:text-green-400 dark:text-green-400 dark:hover:text-green-300"
-                  title="Нажмите, чтобы скопировать"
+                  title={t('friends.copyCode')}
                 >
                   {item.user.friendCode}
                 </button>

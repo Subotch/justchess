@@ -53,9 +53,13 @@ export function isLegalMove(
   to: string,
   promotion?: string
 ): boolean {
-  const chess = new Chess(fen);
-  const move = chess.move({ from, to, promotion } as any);
-  return move !== null;
+  try {
+    const chess = new Chess(fen);
+    const move = chess.move({ from, to, promotion } as any);
+    return move !== null;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -67,10 +71,14 @@ export function applyMove(
   to: string,
   promotion?: string
 ): { fen: string; san: string; pgn: string } | null {
-  const chess = new Chess(fen);
-  const move = chess.move({ from, to, promotion } as any);
-  if (!move) return null;
-  return { fen: chess.fen(), san: move.san, pgn: chess.pgn() };
+  try {
+    const chess = new Chess(fen);
+    const move = chess.move({ from, to, promotion } as any);
+    if (!move) return null;
+    return { fen: chess.fen(), san: move.san, pgn: chess.pgn() };
+  } catch {
+    return null;
+  }
 }
 
 /**

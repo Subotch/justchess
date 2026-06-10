@@ -148,15 +148,18 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
           });
 
 // Periodically try to match (every 5 seconds).
-          // Clear any previous interval before overwriting to prevent leaks
-          // when the player calls lobby:join_queue multiple times.
-          if (socket.data.matchInterval) {
-            clearInterval(socket.data.matchInterval);
-            socket.data.matchInterval = undefined;
+          // Guard against double-enqueueing: if a previous interval is already
+          // running (e.g. the player was re-added to queue after leaving), clean it first.
+          const existingInterval = socket.data.matchInterval;
+          if (existingInterval) {
+            clearInterval(existingInterval);
           }
+
           socket.data.matchInterval = setInterval(async () => {
+            // Exit if player is no longer in queue state
             if (!socket.data.isInQueue) {
-              clearInterval(socket.data.matchInterval);
+              clearInterval(socket.data.matchInterval!);
+              socket.data.matchInterval = undefined;
               return;
             }
 
@@ -170,11 +173,14 @@ export function registerLobbyHandlers(io: AppServer, socket: AppSocket): void {
 
             const found = matchmakingQueue.findMatch(updatedEntry);
             if (found) {
-              clearInterval(socket.data.matchInterval);
+              // ── MATCH FOUND ─────────────────────────────────────────
+              // CRITICAL: clean up interval BEFORE any async work so that
+              // the browser-navigating socket doesn't fire another match.
+              clearInterval(socket.data.matchInterval!);
               socket.data.matchInterval = undefined;
-              matchmakingQueue.remove(userId);
               socket.data.isInQueue = false;
               socket.leave("lobby");
+              matchmakingQueue.remove(userId);
 
               // Clear queue state for found opponent too
               await clearQueueSocketState(io, found.userId);

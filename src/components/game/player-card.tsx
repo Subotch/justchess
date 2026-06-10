@@ -55,9 +55,9 @@ export function PlayerCard({ player, isTop, fen }: PlayerCardProps) {
   return (
     <div
       className={`flex items-center justify-between px-4 py-2 rounded-lg ${
-        player.isActive
-          ? "bg-slate-700 border border-slate-500"
-          : "bg-slate-800/50 border border-slate-700"
+player.isActive
+          ? "bg-slate-200 dark:bg-slate-700 border border-slate-400 dark:border-slate-500"
+          : "bg-slate-100 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700"
       }`}
     >
       {/* Player info */}
@@ -70,8 +70,8 @@ export function PlayerCard({ player, isTop, fen }: PlayerCardProps) {
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-white font-semibold text-sm truncate">{player.username}</p>
-          <p className="text-slate-400 text-xs">{player.rating}</p>
+<p className="text-slate-900 dark:text-white font-semibold text-sm truncate">{player.username}</p>
+          <p className="text-slate-500 dark:text-slate-400 text-xs">{player.rating}</p>
         </div>
         {capturedDisplay.length > 0 && (
           <div className="flex flex-wrap gap-0 leading-none text-base ml-1 opacity-90" title="Captured pieces">
@@ -85,13 +85,13 @@ export function PlayerCard({ player, isTop, fen }: PlayerCardProps) {
       {/* Clock */}
       <div
         className={`flex-shrink-0 font-mono font-bold text-xl px-3 py-1 rounded ${
-          isCritical
+isCritical
             ? "bg-red-600 text-white animate-pulse"
             : isLowTime
-            ? "bg-yellow-600/30 text-yellow-300"
+            ? "bg-yellow-600/30 text-yellow-700 dark:text-yellow-300"
             : player.isActive
-            ? "bg-slate-600 text-white"
-            : "bg-slate-700/50 text-slate-400"
+            ? "bg-slate-600 dark:bg-slate-600 text-white"
+            : "bg-slate-200 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400"
         }`}
       >
         {timeDisplay}

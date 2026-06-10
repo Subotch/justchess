@@ -92,6 +92,7 @@ export interface UserPreferences {
 
 export interface UserProfileResponse {
   id: string;
+  email?: string; // only present for own profile
   username: string | null;
   friendCode: string;
   name: string;

@@ -18,15 +18,16 @@ type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let socketInstance: AppSocket | null = null;
 
-function getSocket(): AppSocket {
+export function getSocket(): AppSocket {
   if (!socketInstance) {
     socketInstance = io(process.env.NEXT_PUBLIC_APP_URL || window.location.origin, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
       autoConnect: false,
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
       withCredentials: true,
     }) as AppSocket;
   }
@@ -160,9 +161,12 @@ export function useSocket() {
       setSpectatorCount(data.count);
     });
 
-    // ── Lobby events ─────────────────────────────────────────────────
+// ── Lobby events ─────────────────────────────────────────────────
     socket.on("lobby:match_found", (data) => {
+      // Leave queue immediately — prevents stale interval from firing
+      // while the browser is navigating to the game page.
       leaveQueue();
+      socket.emit("lobby:leave_queue");
       notify.success("Match found!", `Playing against ${data.opponent.username}`);
       // Navigate to the game page
       window.location.href = `/game/${data.gameId}`;
@@ -231,13 +235,12 @@ export function useSocket() {
       socket.off("social:friend_online");
       socket.off("social:friend_offline");
       socket.off("error:invalid_move");
-      socket.off("error:generic");
+socket.off("error:generic");
     };
   }, []);
 
   const joinGame = useCallback((gameId: string) => {
-    const socket = socketRef.current;
-    if (!socket) return;
+    const socket = getSocket();
     const doJoin = () => socket.emit("game:join", { gameId });
     if (socket.connected) {
       doJoin();

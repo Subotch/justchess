@@ -14,7 +14,6 @@
 
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
-import os from "os";
 
 // Путь к single-threaded WASM Stockfish (не требует SharedArrayBuffer)
 const STOCKFISH_JS = path.join(

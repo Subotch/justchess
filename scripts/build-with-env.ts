@@ -20,12 +20,12 @@ if (existsSync(envPath)) {
   console.warn("[build] .env.local не найден, используем process.env");
 }
 
-// Запустить next build
+// Запустить next build с ограничением памяти
 console.log("[build] Запуск next build...");
 try {
   execSync("next build", {
     stdio: "inherit",
-    env: process.env,
+    env: { ...process.env, NODE_OPTIONS: "--max-old-space-size=3072" },
   });
   console.log("[build] Build завершён успешно");
 } catch (err) {

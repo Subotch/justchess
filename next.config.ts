@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   // Use standalone output for Docker/custom server
   output: "standalone",
 
+  // Disable Next.js built-in dev indicators (N logo etc.)
+  devIndicators: false,
+
   // Experimental features
   experimental: {
     // Server Actions are stable in Next.js 15

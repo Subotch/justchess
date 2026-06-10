@@ -126,8 +126,12 @@ export async function GET(
       );
     const totalPlayTimeMinutes = playTimeRow?.totalMinutes ?? 0;
 
+// Include email only for own profile
+    const isOwnProfile = session?.user?.id === id;
+
     return ok({
       id: user.id,
+      email: isOwnProfile ? user.email : undefined,
       username: user.username,
       friendCode: user.friendCode,
       name: user.name,

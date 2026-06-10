@@ -9,6 +9,7 @@ import type { SocketData } from "@/types/socket";
 import { SOCKET_ROOMS } from "@/types/socket";
 import { gameService } from "@/services/game.service";
 import { clockManager } from "../clock-manager";
+import { AsyncQueue } from "../queue";
 import type { PieceColor } from "@/types/game";
 import { withRateLimit } from "../middleware/rate-limit.middleware";
 import { getBestMove } from "@/server/stockfish/stockfish-pool";
@@ -16,11 +17,19 @@ import { logger } from "@/server/logger";
 
 type AppSocket = Socket<any, any, any, SocketData>;
 
+/** Serializes game:join calls per gameId to prevent race conditions
+ *  when both players emit simultaneously. */
+const joinQueue = new AsyncQueue();
+
 export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
   // ── game:join ────────────────────────────────────────────────────────
+  // Serialize concurrent join calls per gameId to prevent:
+  //   1. Double-startGame() race — only one player transitions waiting→active
+  //   2. Double clock start — second player sees clock already running
   socket.on("game:join", async ({ gameId }: { gameId: string }) => {
     try {
-      const game = await gameService.getGame(gameId);
+      await joinQueue.enqueue(gameId, async () => {
+        const game = await gameService.getGame(gameId);
       if (!game) {
         socket.emit("error:generic", { code: "NOT_FOUND", message: "Game not found" });
         return;
@@ -119,11 +128,11 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
             incrementMs,
             "white",
             // onTick — broadcast clock every second
-            ({ whiteTimeMs, blackTimeMs, activeColor }) => {
+            ({ whiteTimeMs: tickWhiteMs, blackTimeMs: tickBlackMs, activeColor }) => {
               io.to(room).emit("game:clock_update", {
                 gameId,
-                whiteTimeRemainingMs: whiteTimeMs,
-                blackTimeRemainingMs: blackTimeMs,
+                whiteTimeRemainingMs: tickWhiteMs,
+                blackTimeRemainingMs: tickBlackMs,
                 activeColor,
               });
             },
@@ -192,22 +201,70 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
             createdAt: started.createdAt.toISOString(),
           };
 
-          // Send game:started to each participant socket individually
-          // so that a reconnecting player doesn't cause the opponent to reset
-          // their client state upon a spurious duplicate game:started.
+          // Always send game:started to the current socket immediately,
+          // so the first player doesn't hang waiting for the second.
+          socket.emit("game:started", { game: initialGameState });
+
+          // If only one human player has joined so far, the other player
+          // will get game:started when they emit game:join (handled by the
+          // game.status === "active" branch below).
+          // Send to already-connected participant sockets too.
           for (const ps of participantSockets) {
-            (ps as any).emit("game:started", { game: initialGameState });
-          }
-          // Also send to the socket that just joined (it may not be in
-          // participantSockets yet if fetchSockets() was called before join)
-          if (!participantSockets.some((ps) => (ps as any).data?.userId === userId)) {
-            socket.emit("game:started", { game: initialGameState });
+            if ((ps as any).data?.userId !== userId) {
+              (ps as any).emit("game:started", { game: initialGameState });
+            }
           }
 
           // If AI plays white, make the first move
           if (started.isAiGame && started.aiColor === "white") {
             setTimeout(() => makeAiMove(io, gameId, room), 500);
           }
+} else {
+          // Only one player in the room — they are waiting for opponent.
+          // Send a "waiting for opponent" state immediately so UI loads.
+          const timeMs = game.timeControlMinutes * 60 * 1000;
+          socket.emit("game:started", {
+            game: {
+              id: game.id,
+              status: "waiting",
+              gameType: game.gameType as any,
+              timingCategory: game.timingCategory as any,
+              timeControlMinutes: game.timeControlMinutes,
+              incrementSeconds: game.incrementSeconds,
+              white: {
+                id: game.whitePlayerId!,
+                username: (game as any).whitePlayer?.username ?? "Player",
+                name: (game as any).whitePlayer?.name ?? "Player",
+                image: (game as any).whitePlayer?.image ?? null,
+                rating: game.whiteRatingBefore ?? 1200,
+                color: "white",
+                timeRemainingMs: timeMs,
+                isConnected: true,
+              },
+              black: {
+                id: null,
+                username: "Waiting...",
+                name: null,
+                image: null,
+                rating: null,
+                color: "black",
+                timeRemainingMs: timeMs,
+                isConnected: false,
+              },
+              fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+              pgn: "",
+              moves: [],
+              currentTurn: "white",
+              moveCount: 0,
+              result: "in_progress",
+              isAiGame: false,
+              aiDifficulty: undefined,
+              aiColor: "black",
+              spectatorCount: 0,
+              startedAt: null,
+createdAt: game.createdAt.toISOString(),
+            },
+          });
         }
       }
 
@@ -344,6 +401,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
           },
         });
       }
+      }); // end joinQueue.enqueue
     } catch (err) {
       logger.error({ err }, "[game:join]");
       socket.emit("error:generic", { code: "INTERNAL", message: "Failed to join game" });
@@ -357,11 +415,14 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
       const userId = socket.data.userId;
       const room = SOCKET_ROOMS.game(gameId);
 
-      // Get current clock times
-      const clockState = clockManager.getGameState(gameId);
+      // NOTE: clockState is captured BEFORE makeMove so that switchTurn can
+      // detect if another move was processed in the meantime (race guard).
+      // We read activeColor for the guard, but the actual time check uses
+      // the fresh clock state after makeMove completes.
+      const clockStateBefore = clockManager.getGameState(gameId);
 
       // If clock was stopped (timeout already fired) — reject the move
-      if (!clockState) {
+      if (!clockStateBefore) {
         socket.emit("error:invalid_move", {
           gameId,
           reason: "Game is not active (clock stopped)",
@@ -369,18 +430,7 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         return;
       }
 
-      const timeRemaining = clockState.activeColor === "white"
-        ? clockState.whiteTimeMs
-        : clockState.blackTimeMs;
-
-      // Reject move if active player's clock has run out
-      if (timeRemaining <= 0) {
-        socket.emit("error:invalid_move", {
-          gameId,
-          reason: "Time is up",
-        });
-        return;
-      }
+      const activeColorBefore = clockStateBefore.activeColor;
 
       const result = await gameService.makeMove({
         gameId,
@@ -388,7 +438,10 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         from,
         to,
         promotion: promotion as any,
-        clockRemainingMs: timeRemaining,
+        clockRemainingMs:
+          activeColorBefore === "white"
+            ? clockStateBefore.whiteTimeMs
+            : clockStateBefore.blackTimeMs,
       });
 
       if (!result.success) {
@@ -399,14 +452,36 @@ export function registerGameHandlers(io: AppServer, socket: AppSocket): void {
         return;
       }
 
-      // Switch clock turn with race condition guard.
-      // switchTurn is serialized via per-game async queue inside ClockManager,
-      // so the check-and-mutate is atomic. appliedIncrement tells us whether
-      // the increment was actually applied (false ⇒ stale call, ignore).
-      const switchResult = await clockManager.switchTurn(gameId, clockState?.activeColor);
+      // Reject move if active player's clock has run out (check AFTER makeMove
+      // so the clock has had a chance to tick down during the async call)
+      const clockStateAfter = clockManager.getGameState(gameId);
+      if (!clockStateAfter) {
+        socket.emit("error:invalid_move", {
+          gameId,
+          reason: "Game is not active (clock stopped)",
+        });
+        return;
+      }
+
+      const timeRemaining = clockStateAfter.activeColor === "white"
+        ? clockStateAfter.whiteTimeMs
+        : clockStateAfter.blackTimeMs;
+
+      if (timeRemaining <= 0) {
+        socket.emit("error:invalid_move", {
+          gameId,
+          reason: "Time is up",
+        });
+        return;
+      }
+
+      // Switch clock turn.
+      // Use activeColorBefore (captured before the await) — this is the color that
+      // just moved and is eligible for the increment. switchTurn is serialized via
+      // per-game async queue so the check-and-mutate is atomic.
+      const switchResult = await clockManager.switchTurn(gameId, activeColorBefore);
       if (!switchResult.appliedIncrement) {
         logger.warn({ gameId, reason: switchResult.reason }, "[game:move] Turn switch did not apply increment");
-        // No retry needed — if color mismatched, another move already processed.
       }
       const newClockState = clockManager.getGameState(gameId);
 
@@ -692,13 +767,13 @@ async function makeAiMove(io: AppServer, gameId: string, room: string): Promise<
     }
     const newClockState = clockManager.getGameState(gameId);
 
-    const movePayload = {
+const movePayload = {
       gameId,
       move: {
         san: result.san!,
         uci: result.uci!,
         fen: result.fen!,
-        moveNumber: Math.ceil((existingMoves.length + 1) / 2),
+        moveNumber: result.moveNumber ?? Math.ceil((existingMoves.length + 1) / 2),
         color: aiColor as PieceColor,
         clockRemainingMs:
           aiColor === "white"

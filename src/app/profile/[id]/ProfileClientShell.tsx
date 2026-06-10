@@ -1,6 +1,7 @@
 "use client";
 
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AccountSettings } from "@/components/profile/account-settings";
 
 /**
  * ProfileClientShell — клиентский компонент профиля.
@@ -35,7 +36,7 @@ type AchievementsData = {
   totalCount: number;
 };
 
-type ActiveTab = "games" | "achievements";
+type ActiveTab = "games" | "achievements" | "settings";
 
 interface ProfileClientShellProps {
   userId: string;
@@ -178,12 +179,12 @@ export function ProfileClientShell({
       case "social": return "bg-purple-900/40 text-purple-300 border-purple-700";
       case "milestone": return "bg-yellow-900/40 text-yellow-300 border-yellow-700";
       case "special": return "bg-red-900/40 text-red-300 border-red-700";
-      default: return "bg-slate-700 text-slate-300 border-slate-600";
+      default: return "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600";
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-900 px-4 py-10 text-white">
+    <main className="min-h-screen bg-slate-100 dark:bg-slate-800 px-4 py-10 text-slate-900 dark:text-white">
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-3xl font-bold" suppressHydrationWarning>
@@ -191,16 +192,16 @@ export function ProfileClientShell({
           </h1>
           <Link
             href="/"
-            className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600"
+            className="rounded-lg bg-slate-200 dark:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-700 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-600"
           >
             <span suppressHydrationWarning>{t("nav.home")}</span>
           </Link>
         </div>
 
         {/* Header card */}
-        <section className="rounded-2xl border border-slate-700 bg-slate-800 p-6 shadow-sm">
+<section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
           <div className="flex flex-col gap-6 md:flex-row md:items-center">
-            <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-green-500 text-3xl font-bold">
+            <div className="flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-green-500 text-3xl font-bold text-white">
               {profile.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -222,8 +223,8 @@ export function ProfileClientShell({
                 <span
                   className={`rounded-full px-2 py-0.5 text-xs ${
                     profile.isOnline
-                      ? "bg-green-900/40 text-green-400"
-                      : "bg-slate-700 text-slate-300"
+? "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400"
+                      : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                   }`}
                   suppressHydrationWarning
                 >
@@ -234,14 +235,14 @@ export function ProfileClientShell({
               <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-400">
                 <span suppressHydrationWarning>
                   {t("profile.memberSince")}:{" "}
-                  <span className="text-slate-200">
+<span className="text-slate-700 dark:text-slate-200">
                     {dateFormatter.format(new Date(profile.createdAt))}
                   </span>
                 </span>
                 {!profile.isOnline && profile.lastSeenAt && (
                   <span suppressHydrationWarning>
                     {t("profile.lastSeen")}:{" "}
-                    <span className="text-slate-200">
+<span className="text-slate-700 dark:text-slate-200">
                       {dateTimeFormatter.format(new Date(profile.lastSeenAt))}
                     </span>
                   </span>
@@ -249,7 +250,7 @@ export function ProfileClientShell({
                 {profile.country && (
                   <span suppressHydrationWarning>
                     {t("profile.country")}:{" "}
-                    <span className="text-slate-200">{profile.country}</span>
+                    <span className="text-slate-700 dark:text-slate-200">{profile.country}</span>
                   </span>
                 )}
               </div>
@@ -319,8 +320,8 @@ export function ProfileClientShell({
 
         {/* Stats */}
         {stats && (
-          <section className="rounded-2xl border border-slate-700 bg-slate-800 p-6 shadow-sm">
-            <h2 className="mb-4 text-xl font-semibold" suppressHydrationWarning>
+<section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+            <h2 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white" suppressHydrationWarning>
               {t("profile.stats")}
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -336,16 +337,16 @@ export function ProfileClientShell({
           </section>
         )}
 
-        {/* Tabs: Recent Games / Achievements */}
-        <section className="rounded-2xl border border-slate-700 bg-slate-800 shadow-sm">
-          <div className="flex border-b border-slate-700">
+{/* Tabs: Recent Games / Achievements / Settings */}
+<section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+          <div className="flex border-b border-slate-200 dark:border-slate-700">
             <button
               type="button"
               onClick={() => handleTabChange("games")}
               className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
                 activeTab === "games"
-                  ? "border-b-2 border-green-400 text-green-400"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "border-b-2 border-green-500 text-green-600 dark:text-green-400"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
               suppressHydrationWarning
             >
@@ -356,13 +357,27 @@ export function ProfileClientShell({
               onClick={() => handleTabChange("achievements")}
               className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
                 activeTab === "achievements"
-                  ? "border-b-2 border-green-400 text-green-400"
-                  : "text-slate-400 hover:text-slate-200"
+                  ? "border-b-2 border-green-500 text-green-600 dark:text-green-400"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
               suppressHydrationWarning
             >
               {t("profile.achievementsTab")}
             </button>
+            {isOwnProfile && (
+              <button
+                type="button"
+                onClick={() => handleTabChange("settings")}
+                className={`flex-1 px-6 py-4 text-sm font-semibold transition-colors ${
+                  activeTab === "settings"
+                    ? "border-b-2 border-green-500 text-green-600 dark:text-green-400"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                }`}
+                suppressHydrationWarning
+              >
+                {t("profile.accountSettings")}
+              </button>
+            )}
           </div>
 
           <div className="p-6">
@@ -399,7 +414,7 @@ export function ProfileClientShell({
                         >
                           <div className="flex items-center gap-3">
                             <span
-                              className={`min-w-[72px] rounded-md bg-slate-900 px-2 py-1 text-center text-sm font-semibold ${resultColor}`}
+                              className={`min-w-[72px] rounded-md bg-slate-200 dark:bg-slate-900 px-2 py-1 text-center text-sm font-semibold ${resultColor}`}
                               suppressHydrationWarning
                             >
                               {resultLabel}
@@ -435,7 +450,7 @@ export function ProfileClientShell({
                           </div>
                           <Link
                             href={`/game/${game.id}/review`}
-                            className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-600"
+                            className="rounded-lg bg-slate-200 dark:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-600"
                           >
                             <span suppressHydrationWarning>{t("profile.viewGame")}</span>
                           </Link>
@@ -447,7 +462,7 @@ export function ProfileClientShell({
                 <div className="mt-4 flex justify-center">
                   <Link
                     href={`/profile/${userId}/games`}
-                    className="rounded-lg bg-slate-700 px-5 py-2 text-sm font-medium text-white hover:bg-slate-600"
+                    className="rounded-lg bg-slate-200 dark:bg-slate-700 px-5 py-2 text-sm font-medium text-slate-700 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-600"
                   >
                     <span suppressHydrationWarning>{t("profile.showAllGames")}</span>
                   </Link>
@@ -462,15 +477,15 @@ export function ProfileClientShell({
                 ) : achievements ? (
                   <>
                     <div className="mb-6 flex flex-wrap items-center gap-4">
-                      <div className="rounded-xl border border-slate-700 bg-slate-900/40 px-5 py-3">
-                        <p className="text-xs uppercase tracking-wider text-slate-400" suppressHydrationWarning>
+<div className="rounded-xl border border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40 px-5 py-3">
+                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400" suppressHydrationWarning>
                           {t("profile.earnedAchievements")
                             .replace("{{earned}}", String(achievements.earnedCount))
                             .replace("{{total}}", String(achievements.totalCount))}
                         </p>
                       </div>
                       <div className="rounded-xl border border-slate-700 bg-slate-900/40 px-5 py-3">
-                        <p className="text-xs uppercase tracking-wider text-slate-400" suppressHydrationWarning>
+                        <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400" suppressHydrationWarning>
                           {t("profile.totalPoints")}:{" "}
                           <span className="text-yellow-400 font-bold">{achievements.totalPoints}</span>
                         </p>
@@ -489,9 +504,9 @@ export function ProfileClientShell({
                             <div
                               key={ach.id}
                               className={`group relative flex items-start gap-4 rounded-xl border p-4 transition-all duration-200 ${
-                                ach.earned
-                                  ? "border-yellow-500/40 bg-gradient-to-br from-slate-800 to-slate-900 shadow-md shadow-yellow-500/5"
-                                  : "border-slate-700/60 bg-slate-900/30"
+ach.earned
+                                  ? "border-yellow-500/40 bg-gradient-to-br from-white to-slate-50 shadow-md shadow-yellow-500/5"
+                                  : "border-slate-300/60 bg-slate-50/30 dark:border-slate-700/60 dark:bg-slate-900/30"
                               }`}
                             >
                               {ach.earned && (
@@ -499,9 +514,9 @@ export function ProfileClientShell({
                               )}
                               <div
                                 className={`relative flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-2xl transition-all ${
-                                  ach.earned
+ach.earned
                                     ? "bg-yellow-500/20 ring-2 ring-yellow-500/40"
-                                    : "bg-slate-700/50 grayscale"
+                                    : "bg-slate-100 dark:bg-slate-700/50 grayscale dark:grayscale-0"
                                 }`}
                               >
                                 {isSecret ? "🔒" : ach.earned ? "🏆" : "🔓"}
@@ -513,7 +528,7 @@ export function ProfileClientShell({
                                   </p>
                                   <span
                                     className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
-                                      ach.earned ? categoryColor(ach.category) : "border-slate-700 bg-slate-800/40 text-slate-600"
+                                      ach.earned ? categoryColor(ach.category) : "border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800/40 text-slate-400 dark:text-slate-600"
                                     }`}
                                   >
                                     {categoryLabel(ach.category)}
@@ -552,6 +567,17 @@ export function ProfileClientShell({
                 )}
               </>
             )}
+
+{activeTab === "settings" && isOwnProfile && (
+              <AccountSettings
+                user={{
+                  name: profile.name,
+                  username: profile.username ?? null,
+                  email: (profile as any).email ?? "",
+                  bio: profile.bio,
+                }}
+              />
+            )}
           </div>
         </section>
       </div>
@@ -561,8 +587,8 @@ export function ProfileClientShell({
 
 function RatingCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-800 p-4 shadow-sm">
-      <p className="text-xs uppercase tracking-wider text-slate-400" suppressHydrationWarning>
+    <div className="rounded-2xl border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-800 p-4 shadow-sm">
+      <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400" suppressHydrationWarning>
         {label}
       </p>
       <p className="mt-1 text-2xl font-bold text-green-400">{value}</p>
@@ -573,15 +599,15 @@ function RatingCard({ label, value }: { label: string; value: number }) {
 function StatItem({
   label,
   value,
-  color = "text-white",
+  color = "text-slate-900 dark:text-white",
 }: {
   label: string;
   value: number | string;
   color?: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-4">
-      <p className="text-xs uppercase tracking-wider text-slate-400" suppressHydrationWarning>
+    <div className="rounded-xl border border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40 p-4">
+      <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400" suppressHydrationWarning>
         {label}
       </p>
       <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
