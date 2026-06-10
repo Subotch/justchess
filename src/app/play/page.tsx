@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useSocket } from '@/hooks/use-socket';
 import { useLobbyStore } from '@/stores/lobby-store';
 import { useTranslation } from '@/lib/i18n';
+import { useSession } from '@/lib/auth-client';
 
 const TIME_CONTROLS = [
   { label: 'Bullet 1+0', minutes: 1, increment: 0, category: 'bullet' },
@@ -26,6 +27,7 @@ const TIME_CONTROLS = [
 export default function PlayPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const { data: session } = useSession();
   const { joinQueue, leaveQueue } = useSocket();
   const { queue, joinQueue: joinQueueStore, leaveQueue: leaveQueueStore } = useLobbyStore();
   const [selectedControl, setSelectedControl] = useState(TIME_CONTROLS[6]);
@@ -33,6 +35,12 @@ export default function PlayPage() {
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isInQueue = queue.isInQueue;
+
+  useEffect(() => {
+    if (!session?.user) {
+      router.replace("/auth/sign-in");
+    }
+  }, [session, router]);
 
   useEffect(() => {
     if (queue.isInQueue && queue.joinedAt) {

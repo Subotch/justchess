@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n";
+import { useSession } from "@/lib/auth-client";
 
 type LeaderboardEntry = {
   userId: string;
@@ -149,7 +151,9 @@ function LeaderboardTable({
 }
 
 export default function LeaderboardPage() {
+  const router = useRouter();
   const { t } = useTranslation();
+  const { data: session } = useSession();
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("bullet");
   const [data, setData] = useState<CategoryLeaderboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,12 +188,18 @@ export default function LeaderboardPage() {
               {t("leaderboard.subtitle")}
             </p>
           </div>
-          <Link
-            href="/play"
+          <button
+            onClick={() => {
+              if (!session?.user) {
+                router.push("/auth/sign-in");
+              } else {
+                router.push("/play");
+              }
+            }}
             className="rounded-lg bg-green-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-green-400"
           >
             {t("play.joinQueue")}
-          </Link>
+          </button>
         </div>
 
         {/* Category tabs */}
